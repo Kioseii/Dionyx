@@ -1,10 +1,13 @@
 import { createContext, useContext } from "react";
 import type { LibraryFilter, TrackGroup } from "../../app/library-groups";
-import type { AppLanguage, LibraryTrack } from "../../app/types";
+import type { AppLanguage, LibraryTrack, SavedPlaylist } from "../../app/types";
 import type { LibraryView } from "../../hooks/use-library-browse";
 import type { uiText } from "../../app/ui";
 
 export type DetailPanelTab = "now" | "lyrics" | "queue";
+
+/** Full pages shown in the main area instead of the library / Discover. */
+export type ShellPage = "home" | "downloads" | "appearance" | "settings";
 
 /**
  * State and actions of the app "shell" (sidebar shortcuts, right panel,
@@ -13,6 +16,20 @@ export type DetailPanelTab = "now" | "lyrics" | "queue";
  */
 export type ShellContextValue = {
   activeDownloadCount: number;
+  /** Page shown in the main area, or null for the library / Discover. */
+  activePage: ShellPage | null;
+  onOpenHome: () => void;
+  currentTrack: LibraryTrack;
+  isPlaying: boolean;
+  onBrowseLibrary: (view: LibraryView) => void;
+  onCreatePlaylist: () => void;
+  onOpenDiscover: () => void;
+  onOpenPlaylist: (playlistId: string) => void;
+  onTogglePlayback: () => void;
+  playlists: SavedPlaylist[];
+  /** Ref callback for the element pages are rendered into (via portals). */
+  onPageRootChange: (element: HTMLElement | null) => void;
+  pageRoot: HTMLElement | null;
   /** Open album/artist (null on the grids and in the songs list). */
   activeGroup: TrackGroup | null;
   albumGroups: TrackGroup[];

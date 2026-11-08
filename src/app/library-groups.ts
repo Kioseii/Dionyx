@@ -13,6 +13,8 @@ export type TrackGroup = {
   totalSeconds: number;
   /** Artist groups only: number of distinct albums. */
   albumCount: number;
+  /** Newest file modification time in the group (Unix seconds, 0 if unknown). */
+  latestAddedAt: number;
 };
 
 export type LibraryFilter = { kind: "album" | "artist"; key: string } | null;
@@ -81,6 +83,7 @@ export function buildAlbumGroups(tracks: LibraryTrack[], variousArtistsLabel: st
         coverTrack: coverIndex !== undefined ? tracks[coverIndex] : null,
         totalSeconds: indices.reduce((sum, index) => sum + seconds(tracks[index]), 0),
         albumCount: 1,
+        latestAddedAt: latestAdded(indices, tracks),
       };
     })
     .sort((left, right) => collator.compare(left.name, right.name));
@@ -118,9 +121,22 @@ export function buildArtistGroups(tracks: LibraryTrack[]): TrackGroup[] {
         coverTrack: coverIndex !== undefined ? tracks[coverIndex] : null,
         totalSeconds: indices.reduce((sum, index) => sum + seconds(tracks[index]), 0),
         albumCount: new Set(indices.map((index) => getAlbumKey(tracks[index]))).size,
+        latestAddedAt: latestAdded(indices, tracks),
       };
     })
     .sort((left, right) => collator.compare(left.name, right.name));
+}
+
+function latestAdded(indices: number[], tracks: LibraryTrack[]) {
+  return indices.reduce((latest, index) => Math.max(latest, tracks[index].modifiedAt ?? 0), 0);
+}
+
+/** Albums with the most recently added files first (only those with a date). */
+export function getRecentlyAddedAlbums(albums: TrackGroup[], limit: number) {
+  return albums
+    .filter((album) => album.latestAddedAt > 0)
+    .sort((left, right) => right.latestAddedAt - left.latestAddedAt)
+    .slice(0, limit);
 }
 
 function sortIndicesByPath(indices: number[], tracks: LibraryTrack[]) {

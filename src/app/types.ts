@@ -43,6 +43,8 @@ export type LibraryTrack = {
   artworkPath?: string | null;
   /** Inline cover: browser mode, freshly edited metadata, or cache fallback. */
   artworkDataUrl?: string | null;
+  /** File modification time in Unix seconds ("recently added"). */
+  modifiedAt?: number | null;
   source?: string;
 };
 

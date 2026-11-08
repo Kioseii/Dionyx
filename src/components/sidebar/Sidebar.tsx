@@ -1,4 +1,4 @@
-import { Compass, Download, FolderOpen, ListMusic, Palette, Plus, RefreshCw, Settings } from "lucide-react";
+import { Compass, Download, FolderOpen, House, ListMusic, Palette, Plus, RefreshCw, Settings } from "lucide-react";
 import { countLabel } from "../../app/library-groups";
 import { useShell } from "../layout/ShellContext";
 import type { SavedPlaylist } from "../../app/types";
@@ -58,6 +58,9 @@ export function Sidebar({
 }: SidebarProps) {
   const shell = useShell();
   const libraryName = shell.scannedPath ? shell.collectionName : shell.copy.noLibraryFolder;
+  const page = shell.activePage;
+  const isLibraryActive = !page && !isDiscoverView && !activePlaylistId;
+  const isDiscoverActive = !page && isDiscoverView;
 
   return (
     <aside
@@ -72,8 +75,17 @@ export function Sidebar({
 
       <nav className="nav-list" aria-label="Primary">
         <button
-          aria-current={!isDiscoverView && !activePlaylistId ? "page" : undefined}
-          className={`nav-item ${!isDiscoverView && !activePlaylistId ? "active" : ""}`}
+          aria-current={page === "home" ? "page" : undefined}
+          className={`nav-item ${page === "home" ? "active" : ""}`}
+          onClick={shell.onOpenHome}
+          type="button"
+        >
+          <House aria-hidden="true" className="nav-item-icon" size={18} strokeWidth={2} />
+          <span>{shell.copy.homeNav}</span>
+        </button>
+        <button
+          aria-current={isLibraryActive ? "page" : undefined}
+          className={`nav-item ${isLibraryActive ? "active" : ""}`}
           onClick={onOpenLibrary}
           type="button"
         >
@@ -81,15 +93,20 @@ export function Sidebar({
           <span>{copy.home}</span>
         </button>
         <button
-          aria-current={isDiscoverView ? "page" : undefined}
-          className={`nav-item ${isDiscoverView ? "active" : ""}`}
+          aria-current={isDiscoverActive ? "page" : undefined}
+          className={`nav-item ${isDiscoverActive ? "active" : ""}`}
           onClick={onOpenDiscover}
           type="button"
         >
           <Compass aria-hidden="true" className="nav-item-icon" size={18} strokeWidth={2} />
           <span>{copy.discoverNav}</span>
         </button>
-        <button className="nav-item" onClick={shell.onOpenDownloads} type="button">
+        <button
+          aria-current={page === "downloads" ? "page" : undefined}
+          className={`nav-item ${page === "downloads" ? "active" : ""}`}
+          onClick={shell.onOpenDownloads}
+          type="button"
+        >
           <Download aria-hidden="true" className="nav-item-icon" size={18} strokeWidth={2} />
           <span>{shell.copy.downloadsNav}</span>
           {shell.activeDownloadCount > 0 ? (
@@ -115,7 +132,7 @@ export function Sidebar({
           {savedPlaylists.map((playlist) => (
             <div className="playlist-options-shell" key={playlist.id}>
               <button
-                className={`playlist-item ${activePlaylistId === playlist.id ? "selected" : ""}`}
+                className={`playlist-item ${!page && activePlaylistId === playlist.id ? "selected" : ""}`}
                 onClick={() => {
                   onSelectPlaylist(playlist.id);
                 }}
@@ -189,11 +206,21 @@ export function Sidebar({
       </section>
 
       <div className="sidebar-footer">
-        <button className="nav-item nav-item--small" onClick={shell.onOpenAppearance} type="button">
+        <button
+          aria-current={page === "appearance" ? "page" : undefined}
+          className={`nav-item nav-item--small ${page === "appearance" ? "active" : ""}`}
+          onClick={shell.onOpenAppearance}
+          type="button"
+        >
           <Palette aria-hidden="true" className="nav-item-icon" size={17} strokeWidth={2} />
           <span>{shell.copy.appearanceNav}</span>
         </button>
-        <button className="nav-item nav-item--small" onClick={shell.onOpenSettings} type="button">
+        <button
+          aria-current={page === "settings" ? "page" : undefined}
+          className={`nav-item nav-item--small ${page === "settings" ? "active" : ""}`}
+          onClick={shell.onOpenSettings}
+          type="button"
+        >
           <Settings aria-hidden="true" className="nav-item-icon" size={17} strokeWidth={2} />
           <span>{shell.copy.settingsNav}</span>
         </button>

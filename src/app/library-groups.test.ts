@@ -5,6 +5,7 @@ import {
   filterGroups,
   formatTotalDuration,
   getPrimaryArtist,
+  getRecentlyAddedAlbums,
   normalizeGroupKey,
 } from "./library-groups";
 import type { LibraryTrack } from "./types";
@@ -98,5 +99,21 @@ describe("filterGroups and formatTotalDuration", () => {
     expect(formatTotalDuration(42 * 60, "es")).toBe("42 min");
     expect(formatTotalDuration(125 * 60, "es")).toBe("2 h 5 min");
     expect(formatTotalDuration(125 * 60, "en")).toBe("2 hr 5 min");
+  });
+});
+
+describe("getRecentlyAddedAlbums", () => {
+  it("orders albums by their newest file and skips undated ones", () => {
+    const tracks: LibraryTrack[] = [
+      { ...track("/a/1.flac", "A", "Old"), modifiedAt: 100 },
+      { ...track("/b/1.flac", "B", "New"), modifiedAt: 300 },
+      { ...track("/a/2.flac", "A", "Old"), modifiedAt: 200 },
+      track("/c/1.flac", "C", "Undated"),
+    ];
+    const albums = buildAlbumGroups(tracks, "Varios");
+    expect(getRecentlyAddedAlbums(albums, 5).map((album) => [album.name, album.latestAddedAt])).toEqual([
+      ["New", 300],
+      ["Old", 200],
+    ]);
   });
 });

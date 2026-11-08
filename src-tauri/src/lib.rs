@@ -552,6 +552,8 @@ struct LibraryTrack {
     artwork_path: Option<String>,
     /// Only used when the cover could not be written to the cache.
     artwork_data_url: Option<String>,
+    /// File modification time (Unix seconds), used for "recently added".
+    modified_at: Option<u64>,
 }
 
 #[derive(Serialize)]
@@ -693,6 +695,11 @@ fn track_from_path(path: &Path, artwork_dir: Option<&Path>) -> LibraryTrack {
         path: path.display().to_string(),
         artwork_path: None,
         artwork_data_url: None,
+        modified_at: fs::metadata(path)
+            .and_then(|metadata| metadata.modified())
+            .ok()
+            .and_then(|modified| modified.duration_since(UNIX_EPOCH).ok())
+            .map(|elapsed| elapsed.as_secs()),
     };
 
     if let Ok(tagged_file) = Probe::open(path).and_then(|probe| probe.read()) {

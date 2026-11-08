@@ -1,5 +1,7 @@
+import { createPortal } from "react-dom";
+import { useShell } from "../layout/ShellContext";
 import type { RefObject } from "react";
-import { Check, ChevronDown, Download, X } from "lucide-react";
+import { Check, ChevronDown, Download } from "lucide-react";
 import { AUDIO_FORMATS } from "../../app/constants";
 import type { AudioDownloadFormat, DownloadItem, ToolingSupport, TrackSearchResult } from "../../app/types";
 
@@ -75,7 +77,6 @@ export function DownloadModal({
   isSearchingTracks,
   isYtdlpAvailable,
   onAddDownload,
-  onClose,
   onDownloadFormatChange,
   onDownloadFormatMenuToggle,
   onDownloadUrlChange,
@@ -92,6 +93,8 @@ export function DownloadModal({
   ytdlpInstallProgress,
   ytdlpVersion,
 }: DownloadModalProps) {
+  const shell = useShell();
+
   if (!isOpen) {
     return null;
   }
@@ -124,35 +127,17 @@ export function DownloadModal({
             ? "Necesario para MP3, FLAC, OGG y WAV. Puede requerir instalacion manual en esta plataforma."
             : "Required for MP3, FLAC, OGG and WAV. It may need manual setup on this platform.");
 
-  return (
-    <div
-      aria-hidden="true"
-      className="modal-backdrop"
-      onClick={onClose}
-    >
-      <div
+  const page = (
+      <section
         aria-labelledby="download-modal-title"
-        aria-modal="true"
-        className="modal-shell download-modal"
-        onClick={(event) => event.stopPropagation()}
-        role="dialog"
+        className="app-page download-page"
       >
-        <div className="download-modal-header">
-          <div className="download-modal-title-row">
-            <Download aria-hidden="true" className="download-modal-icon ui-icon" size={18} strokeWidth={2.1} />
-            <h2 className="modal-title" id="download-modal-title">
-              {copy.downloadModalTitle}
-            </h2>
-          </div>
-          <button
-            aria-label="Cerrar"
-            className="modal-close-button"
-            onClick={onClose}
-            type="button"
-          >
-            <X aria-hidden="true" size={18} strokeWidth={2.1} />
-          </button>
-        </div>
+        <header className="app-page-header">
+          <h1 className="app-page-title" id="download-modal-title">
+            <Download aria-hidden="true" className="download-modal-icon ui-icon" size={24} strokeWidth={2.1} />
+            {copy.downloadModalTitle}
+          </h1>
+        </header>
 
         {toolsMissing ? (
           <div className="setup-screen">
@@ -414,7 +399,9 @@ export function DownloadModal({
             </div>
           </>
         )}
-      </div>
-    </div>
+      </section>
   );
+
+  // Rendered as a page inside the main area (see AppMainStageHost).
+  return shell.pageRoot ? createPortal(page, shell.pageRoot) : null;
 }

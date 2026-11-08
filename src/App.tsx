@@ -6,7 +6,12 @@ import { AppModalsHost } from "./components/modals/AppModalsHost";
 import { AppMainStageHost } from "./components/layout/AppMainStageHost";
 import { NoticeToast } from "./components/layout/NoticeToast";
 import { NowPlayingView } from "./components/player/NowPlayingView";
-import { type DetailPanelTab, ShellProvider, type ShellContextValue } from "./components/layout/ShellContext";
+import {
+  type DetailPanelTab,
+  ShellProvider,
+  type ShellContextValue,
+  type ShellPage,
+} from "./components/layout/ShellContext";
 import { TitleBar } from "./components/layout/TitleBar";
 import { AudioNodes } from "./components/player/AudioNodes";
 import { MiniPlayerOverlay } from "./components/player/MiniPlayerOverlay";
@@ -38,10 +43,13 @@ import "./App.css";
 import "./styles/shell.css";
 import "./styles/library.css";
 import "./styles/now-playing.css";
+import "./styles/pages.css";
 
 function App() {
   const directoryInputRef = useRef<HTMLInputElement | null>(null);
   const [nowPlayingOpen, setNowPlayingOpen] = useState(false);
+  const [homePageOpen, setHomePageOpen] = useState(false);
+  const [pageRoot, setPageRoot] = useState<HTMLElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const audioPreloadRef = useRef<HTMLAudioElement | null>(null);
   const isTransitioningTrackRef = useRef(false);
@@ -586,6 +594,25 @@ function App() {
     selectedTrack,
     themeStyle,
   });
+  // Downloads, Appearance and Settings used to be modals; they are pages now,
+  // derived from the same open flags so every existing entry point (e.g. the
+  // Discover "download" button) still lands on the right page.
+  const activePage: ShellPage | null = isDownloadModalOpen
+    ? "downloads"
+    : isThemeModalOpen
+      ? personalizationView === "settings"
+        ? "settings"
+        : "appearance"
+      : homePageOpen
+        ? "home"
+        : null;
+
+  function closePages() {
+    setHomePageOpen(false);
+    setIsThemeModalOpen(false);
+    closeDownloadModal();
+  }
+
   const sidebarPropsOptions = useSidebarHostOptions({
     activePlaylistId,
     copy,
@@ -593,8 +620,12 @@ function App() {
     logoMarkup: dionyxLogoRaw,
     onCreatePlaylist: createPlaylistFromCurrentSource,
     onDeletePlaylist: deletePlaylist,
-    onOpenDiscover: handleOpenDiscover,
+    onOpenDiscover: () => {
+      closePages();
+      handleOpenDiscover();
+    },
     onOpenLibrary: () => {
+      closePages();
       setLibraryFilter(null);
       returnToLibraryView();
     },
@@ -602,7 +633,10 @@ function App() {
     onOpenPlaylistRename: openPlaylistRenameModal,
     onPlayPlaylistShuffled: playPlaylistShuffled,
     onPlaylistMenuToggle: handlePlaylistMenuToggle,
-    onSelectPlaylist: activatePlaylist,
+    onSelectPlaylist: (playlistId) => {
+      closePages();
+      activatePlaylist(playlistId);
+    },
     openPlaylistMenuId,
     savedPlaylists,
     sidebarOpen,
@@ -841,6 +875,7 @@ function App() {
   });
 
   const openLibraryGroup = (kind: "album" | "artist", key: string) => {
+    closePages();
     setActivePlaylistId(null);
     setIsDiscoverView(false);
     setLibraryView(kind === "album" ? "albums" : "artists");
@@ -848,6 +883,33 @@ function App() {
   };
 
   const shellValue: ShellContextValue = {
+    activePage,
+    onOpenHome: () => {
+      closePages();
+      setHomePageOpen(true);
+    },
+    onPageRootChange: setPageRoot,
+    pageRoot,
+    currentTrack: selectedTrack,
+    isPlaying,
+    onBrowseLibrary: (view) => {
+      closePages();
+      setActivePlaylistId(null);
+      setIsDiscoverView(false);
+      setLibraryFilter(null);
+      setLibraryView(view);
+    },
+    onCreatePlaylist: createPlaylistFromCurrentSource,
+    onOpenDiscover: () => {
+      closePages();
+      handleOpenDiscover();
+    },
+    onOpenPlaylist: (playlistId) => {
+      closePages();
+      activatePlaylist(playlistId);
+    },
+    onTogglePlayback: handleTogglePlaybackRequest,
+    playlists: savedPlaylists,
     activeGroup,
     albumGroups,
     appLanguage,
@@ -886,10 +948,17 @@ function App() {
     libraryTrackCount: tracks.length,
     onDismissNotice: () => setIsBannerVisible(false),
     onEnterMiniMode: handleEnterMiniModeRequest,
-    onOpenAppearance: () => handleOpenPersonalization("theme"),
-    onOpenDownloads: openDownloadModal,
+    onOpenAppearance: () => {
+      closePages();
+      handleOpenPersonalization("theme");
+    },
+    onOpenDownloads: () => {
+      closePages();
+      openDownloadModal();
+    },
     onOpenEqualizer: handleOpenEqualizerModal,
     onOpenSettings: () => {
+      closePages();
       handleOpenPersonalization("settings");
       handleOpenSettingsTab();
     },

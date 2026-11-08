@@ -170,6 +170,8 @@ export function sanitizeTrack(track: LibraryTrack): LibraryTrack {
     quality: sanitizePlainTextInput(track.quality, 48).trim() || "Local",
     duration: /^[0-9]{1,3}:[0-9]{2}$/.test(track.duration) ? track.duration : "--:--",
     artworkPath: typeof track.artworkPath === "string" && track.artworkPath ? track.artworkPath : undefined,
+    modifiedAt:
+      typeof track.modifiedAt === "number" && Number.isFinite(track.modifiedAt) ? track.modifiedAt : undefined,
     artworkDataUrl: safeArtworkDataUrl,
   };
 }
@@ -525,6 +527,7 @@ export function trackFromBrowserFile(file: File, collectionName: string): Librar
     quality: inferTrackQuality(format, file.size),
     duration: "--:--",
     path: relativePath,
+    modifiedAt: Math.floor(file.lastModified / 1000),
     source: URL.createObjectURL(file),
   };
 }

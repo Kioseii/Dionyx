@@ -71,7 +71,7 @@ type GroupCardProps = {
   subtitle: string;
 };
 
-const GroupCard = memo(function GroupCard({ group, kind, onOpen, onPlay, playLabel, subtitle }: GroupCardProps) {
+export const GroupCard = memo(function GroupCard({ group, kind, onOpen, onPlay, playLabel, subtitle }: GroupCardProps) {
   const coverSrc = group.coverTrack ? getTrackArtworkSrc(group.coverTrack) : null;
 
   return (

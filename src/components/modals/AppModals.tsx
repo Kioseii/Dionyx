@@ -1,3 +1,5 @@
+import { createPortal } from "react-dom";
+import { useShell } from "../layout/ShellContext";
 import type { ChangeEvent, RefObject } from "react";
 import { Check, ChevronDown } from "lucide-react";
 import { defaultThemeColor, equalizerPresets, fontPresets, themePresets } from "../../app/constants";
@@ -416,14 +418,10 @@ export function PersonalizationModal({
   isInstallingYtdlp,
   isOpen,
   isYtdlpAvailable,
-  onClose,
-  onDone,
   onFfmpegInstall,
   onFontPresetChange,
   onHideOnTrayChange,
   onLanguageChange,
-  onOpenSettingsTab,
-  onPersonalizationViewChange,
   onRecheckDeps,
   onReset,
   onThemeColorChange,
@@ -439,6 +437,8 @@ export function PersonalizationModal({
   ytdlpInstallProgress,
   ytdlpVersion,
 }: PersonalizationModalProps) {
+  const shell = useShell();
+
   if (!isOpen) {
     return null;
   }
@@ -456,125 +456,22 @@ export function PersonalizationModal({
             ? "La instalacion de herramientas puede variar segun la plataforma."
             : "Tool setup may vary depending on the platform.");
 
-  return (
-    <div
-      aria-hidden="true"
-      className="modal-backdrop"
-      onClick={onClose}
-    >
-      <div
-        aria-labelledby="personalization-modal-title"
-        aria-modal="true"
-        className="modal-shell theme-modal"
-        onClick={(event) => {
-          event.stopPropagation();
-        }}
-        role="dialog"
-      >
-        <p className="eyebrow">{copy.personalize}</p>
-        <h3 id="personalization-modal-title">{copy.adjustLook}</h3>
-
-        <div className="personalization-tabs" role="tablist" aria-label={copy.personalizationTabs}>
-          <button
-            aria-selected={personalizationView === "theme"}
-            className={`personalization-tab ${personalizationView === "theme" ? "active" : ""}`}
-            onClick={() => {
-              onPersonalizationViewChange("theme");
-            }}
-            role="tab"
-            type="button"
-          >
-            {copy.themes}
-          </button>
-          <button
-            aria-selected={personalizationView === "font"}
-            className={`personalization-tab ${personalizationView === "font" ? "active" : ""}`}
-            onClick={() => {
-              onPersonalizationViewChange("font");
-            }}
-            role="tab"
-            type="button"
-          >
-            {copy.fonts}
-          </button>
-          <button
-            aria-selected={personalizationView === "settings"}
-            className={`personalization-tab ${personalizationView === "settings" ? "active" : ""}`}
-            onClick={onOpenSettingsTab}
-            role="tab"
-            type="button"
-          >
-            {copy.settings}
-          </button>
+  const isSettingsPage = personalizationView === "settings";
+  const page = (
+    <div className="app-page personalization-page">
+      <header className="app-page-header app-page-header--row">
+        <div>
+          <h1 className="app-page-title">{isSettingsPage ? shell.copy.settingsNav : shell.copy.appearanceNav}</h1>
+          {isSettingsPage ? null : <p className="library-stats">{copy.adjustLook}</p>}
         </div>
+        {isSettingsPage ? null : (
+          <button className="library-play-button" onClick={onReset} type="button">
+            {copy.reset}
+          </button>
+        )}
+      </header>
 
-        <div className="personalization-panel">
-          {personalizationView === "theme" ? (
-            <>
-              <div className="theme-preview" style={{ backgroundColor: themeColor }}>
-                <span>{themeColor.toUpperCase()}</span>
-              </div>
-
-              <div className="theme-swatches">
-                {themePresets.map((preset) => (
-                  <button
-                    aria-label={`Usar tema ${preset.name}`}
-                    className={`theme-swatch ${themeColor === preset.value ? "selected" : ""}`}
-                    key={preset.value}
-                    onClick={() => {
-                      onThemeColorChange(preset.value);
-                    }}
-                    style={{ backgroundColor: preset.value }}
-                    type="button"
-                  />
-                ))}
-              </div>
-
-              <label className="modal-field" htmlFor="theme-color-input">
-                <span>{copy.customColor}</span>
-                <div className="theme-picker-row">
-                  <input
-                    className="theme-color-input"
-                    id="theme-color-input"
-                    onChange={(event) => {
-                      onThemeColorChange(event.currentTarget.value);
-                    }}
-                    type="color"
-                    value={themeColor}
-                  />
-                  <input
-                    className="modal-input theme-hex-input"
-                    onBlur={onThemeHexBlur}
-                    onChange={(event) => {
-                      onThemeHexDraftChange(event.currentTarget.value);
-                    }}
-                    placeholder={defaultThemeColor}
-                    spellCheck={false}
-                    type="text"
-                    value={themeHexDraft}
-                  />
-                </div>
-                <p className="muted modal-hint">{copy.hexHint}</p>
-              </label>
-            </>
-          ) : personalizationView === "font" ? (
-            <div className="font-preset-grid">
-              {fontPresets.map((preset) => (
-                <button
-                  aria-label={`Usar fuente ${preset.label}`}
-                  className={`font-preset-card ${fontPresetId === preset.id ? "selected" : ""}`}
-                  key={preset.id}
-                  onClick={() => {
-                    onFontPresetChange(preset.id);
-                  }}
-                  type="button"
-                >
-                  <span className="font-preset-label">{preset.label}</span>
-                  <strong style={{ fontFamily: preset.displayFamily, ...preset.sampleStyle }}>{preset.sample}</strong>
-                </button>
-              ))}
-            </div>
-          ) : (
+      {isSettingsPage ? (
             <div className="settings-panel">
               <div className="settings-card">
                 <strong>{copy.hideOnTrayLabel}</strong>
@@ -699,26 +596,80 @@ export function PersonalizationModal({
                 </div>
               </div>
             </div>
-          )}
-        </div>
+      ) : (
+        <div className="page-columns">
+          <section aria-labelledby="appearance-color-title" className="page-card">
+            <h2 className="page-card-title" id="appearance-color-title">{copy.themes}</h2>
+              <div className="theme-preview" style={{ backgroundColor: themeColor }}>
+                <span>{themeColor.toUpperCase()}</span>
+              </div>
 
-        <div className="modal-actions">
-          <button
-            className="mini-button"
-            onClick={onReset}
-            type="button"
-          >
-            {copy.reset}
-          </button>
-          <button
-            className="mini-button active"
-            onClick={onDone}
-            type="button"
-          >
-            {copy.done}
-          </button>
+              <div className="theme-swatches">
+                {themePresets.map((preset) => (
+                  <button
+                    aria-label={`Usar tema ${preset.name}`}
+                    className={`theme-swatch ${themeColor === preset.value ? "selected" : ""}`}
+                    key={preset.value}
+                    onClick={() => {
+                      onThemeColorChange(preset.value);
+                    }}
+                    style={{ backgroundColor: preset.value }}
+                    type="button"
+                  />
+                ))}
+              </div>
+
+              <label className="modal-field" htmlFor="theme-color-input">
+                <span>{copy.customColor}</span>
+                <div className="theme-picker-row">
+                  <input
+                    className="theme-color-input"
+                    id="theme-color-input"
+                    onChange={(event) => {
+                      onThemeColorChange(event.currentTarget.value);
+                    }}
+                    type="color"
+                    value={themeColor}
+                  />
+                  <input
+                    className="modal-input theme-hex-input"
+                    onBlur={onThemeHexBlur}
+                    onChange={(event) => {
+                      onThemeHexDraftChange(event.currentTarget.value);
+                    }}
+                    placeholder={defaultThemeColor}
+                    spellCheck={false}
+                    type="text"
+                    value={themeHexDraft}
+                  />
+                </div>
+                <p className="muted modal-hint">{copy.hexHint}</p>
+              </label>
+          </section>
+          <section aria-labelledby="appearance-font-title" className="page-card">
+            <h2 className="page-card-title" id="appearance-font-title">{copy.fonts}</h2>
+            <div className="font-preset-grid">
+              {fontPresets.map((preset) => (
+                <button
+                  aria-label={`Usar fuente ${preset.label}`}
+                  className={`font-preset-card ${fontPresetId === preset.id ? "selected" : ""}`}
+                  key={preset.id}
+                  onClick={() => {
+                    onFontPresetChange(preset.id);
+                  }}
+                  type="button"
+                >
+                  <span className="font-preset-label">{preset.label}</span>
+                  <strong style={{ fontFamily: preset.displayFamily, ...preset.sampleStyle }}>{preset.sample}</strong>
+                </button>
+              ))}
+            </div>
+          </section>
         </div>
-      </div>
+      )}
     </div>
   );
+
+  // Rendered as a page inside the main area (see AppMainStageHost).
+  return shell.pageRoot ? createPortal(page, shell.pageRoot) : null;
 }
