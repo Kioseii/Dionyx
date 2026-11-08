@@ -15,6 +15,8 @@ use std::{
 };
 use tauri::Manager;
 
+mod lastfm;
+
 // ── Discord Rich Presence (custom IPC — supports activity type 2 "Listening") ──
 
 const DISCORD_CLIENT_ID: &str = "1518467237512609883";
@@ -2230,7 +2232,12 @@ pub fn run() {
             download_audio,
             fetch_url,
             update_discord_presence,
-            clear_discord_presence
+            clear_discord_presence,
+            lastfm::lastfm_is_configured,
+            lastfm::lastfm_begin_auth,
+            lastfm::lastfm_finish_auth,
+            lastfm::lastfm_now_playing,
+            lastfm::lastfm_scrobble
         ])
         .setup(|app| {
             use tauri::{

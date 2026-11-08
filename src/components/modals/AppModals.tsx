@@ -2,7 +2,7 @@ import { ModalFrame } from "./ModalFrame";
 import { createPortal } from "react-dom";
 import { useShell } from "../layout/ShellContext";
 import { AppearancePreview } from "../pages/AppearancePreview";
-import { AboutSettingsCard, LibrarySettingsCard, PlaybackSettingsCard, ShortcutsSettingsCard } from "../pages/SettingsCards";
+import { AboutSettingsCard, LastfmSettingsCard, LibrarySettingsCard, PlaybackSettingsCard, ShortcutsSettingsCard } from "../pages/SettingsCards";
 import type { ChangeEvent, RefObject } from "react";
 import { Check, ChevronDown } from "lucide-react";
 import { defaultThemeColor, equalizerPresets, fontPresets, themePresets } from "../../app/constants";
@@ -480,6 +480,7 @@ export function PersonalizationModal({
 
               <PlaybackSettingsCard />
               <ShortcutsSettingsCard />
+              <LastfmSettingsCard />
 
               <div className="settings-card settings-card--tools">
                 <span className="font-preset-label">{appLanguage === "es" ? toolsCopy.toolsEs : toolsCopy.toolsEn}</span>

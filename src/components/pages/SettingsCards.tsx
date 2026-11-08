@@ -92,6 +92,77 @@ export function PlaybackSettingsCard() {
   );
 }
 
+/** Settings card: link a Last.fm account and scrobble what you listen to. */
+export function LastfmSettingsCard() {
+  const { copy, lastfm } = useShell();
+  const connected = Boolean(lastfm.userName);
+
+  let body;
+  if (!lastfm.configured) {
+    body = <p className="muted settings-copy">{copy.lastfmNotConfigured}</p>;
+  } else if (connected) {
+    body = (
+      <>
+        <p className="muted settings-copy">
+          {copy.lastfmConnectedAs} <strong className="lastfm-user">{lastfm.userName}</strong>
+          {lastfm.queueCount > 0 ? ` · ${lastfm.queueCount} ${copy.lastfmPending}` : ""}
+        </p>
+        <div className="transition-row">
+          <span id="lastfm-enabled-label">{copy.lastfmScrobbleLabel}</span>
+          <button
+            aria-checked={lastfm.enabled}
+            aria-labelledby="lastfm-enabled-label"
+            className={`settings-toggle ${lastfm.enabled ? "active" : ""}`}
+            onClick={() => lastfm.setEnabled(!lastfm.enabled)}
+            role="switch"
+            type="button"
+          >
+            <span className="settings-toggle-thumb" />
+          </button>
+        </div>
+        <div className="settings-options">
+          <button className="settings-option" onClick={lastfm.disconnect} type="button">
+            {copy.lastfmDisconnect}
+          </button>
+        </div>
+        <p className="muted settings-copy lastfm-note">{copy.lastfmDisconnectHint}</p>
+      </>
+    );
+  } else if (lastfm.connectState === "waiting") {
+    body = (
+      <>
+        <p className="muted settings-copy">{copy.lastfmWaiting}</p>
+        <div className="settings-options">
+          <button className="settings-option" onClick={lastfm.cancelConnect} type="button">
+            {copy.cancel}
+          </button>
+        </div>
+      </>
+    );
+  } else {
+    body = (
+      <>
+        <p className="muted settings-copy">
+          {lastfm.connectState === "error" ? copy.lastfmError : copy.lastfmHint}
+        </p>
+        <div className="settings-options">
+          <button className="settings-option lastfm-connect" onClick={() => void lastfm.connect()} type="button">
+            {copy.lastfmConnect}
+          </button>
+        </div>
+      </>
+    );
+  }
+
+  return (
+    <div className="settings-card">
+      <span className="font-preset-label">Last.fm</span>
+      <strong>{copy.lastfmTitle}</strong>
+      {body}
+    </div>
+  );
+}
+
 /** Settings card: list of keyboard shortcuts (see app/shortcuts.ts). */
 export function ShortcutsSettingsCard() {
   const { copy } = useShell();

@@ -3,6 +3,7 @@ import type { LibraryFilter, TrackGroup } from "../../app/library-groups";
 import type { AppLanguage, LibraryTrack, SavedPlaylist } from "../../app/types";
 import type { LibraryView } from "../../hooks/use-library-browse";
 import type { useSleepTimer } from "../../hooks/use-sleep-timer";
+import type { useLastfm } from "../../hooks/use-lastfm";
 import type { uiText } from "../../app/ui";
 
 export type DetailPanelTab = "now" | "lyrics" | "queue";
@@ -19,6 +20,8 @@ export type ShellContextValue = {
   /** Accent follows the playing cover (falls back to the chosen color). */
   accentFromArtwork: boolean;
   onToggleAccentFromArtwork: () => void;
+  /** Last.fm account and scrobbling (Settings). */
+  lastfm: ReturnType<typeof useLastfm>;
   /** Song-to-song transitions (Settings > Playback). */
   playbackTransitions: {
     crossfadeSeconds: number;

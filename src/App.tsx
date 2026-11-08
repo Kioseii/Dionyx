@@ -36,9 +36,10 @@ import { useKeyboardShortcuts } from "./hooks/use-keyboard-shortcuts";
 import { useResumePosition } from "./hooks/use-resume-position";
 import { useSleepTimer } from "./hooks/use-sleep-timer";
 import { useTrackTransitions } from "./hooks/use-track-transitions";
+import { useLastfm } from "./hooks/use-lastfm";
 import { sanitizeCrossfadeSeconds } from "./app/transitions";
 import { SHORTCUT_SEEK_SECONDS, SHORTCUT_VOLUME_STEP } from "./app/shortcuts";
-import { getTrackArtworkSrc } from "./app/utils";
+import { getTrackArtworkSrc, getTrackKey } from "./app/utils";
 import { useLibraryRuntimeState } from "./hooks/use-library-runtime-state";
 import { useMainStageHostOptions } from "./hooks/use-main-stage-host-options";
 import { usePlaybackScrub } from "./hooks/use-playback-scrub";
@@ -459,6 +460,13 @@ function App() {
     }
     handleTrackEnded();
   };
+  const lastfm = useLastfm({
+    activeDuration,
+    isPlaying,
+    playbackTime,
+    selectedTrack,
+    trackKey: getTrackKey(selectedTrack),
+  });
   useResumePosition({
     audioRef,
     isPlaying,
@@ -947,6 +955,7 @@ function App() {
   };
 
   const shellValue: ShellContextValue = {
+    lastfm,
     playbackTransitions: {
       crossfadeSeconds,
       gapless,
