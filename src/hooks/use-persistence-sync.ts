@@ -1,26 +1,23 @@
 import { useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import type { LibraryTrack } from "../app/types";
 import { isTauriRuntime, removeStoredValue, writeStoredValue } from "../app/utils";
 import { legacyStorageKeys, storageKeys } from "../app/constants";
 
 type UsePersistenceSyncOptions = {
-  currentTrackIndex: number;
   equalizerValues: number[];
   hideOnTray: boolean;
   isEqualizerEnabled: boolean;
   selectedEqualizerPresetId: string;
-  tracks: LibraryTrack[];
+  selectedTrackPath: string;
   volume: number;
 };
 
 export function usePersistenceSync({
-  currentTrackIndex,
   equalizerValues,
   hideOnTray,
   isEqualizerEnabled,
   selectedEqualizerPresetId,
-  tracks,
+  selectedTrackPath,
   volume,
 }: UsePersistenceSyncOptions) {
   useEffect(() => {
@@ -38,13 +35,12 @@ export function usePersistenceSync({
     removeStoredValue(legacyStorageKeys.volume);
   }, [volume]);
 
+  // The track that is actually current (library or playlist).
   useEffect(() => {
-    const path = tracks[currentTrackIndex]?.path;
-
-    if (path) {
-      writeStoredValue(storageKeys.lastTrackPath, path);
+    if (selectedTrackPath) {
+      writeStoredValue(storageKeys.lastTrackPath, selectedTrackPath);
     }
-  }, [currentTrackIndex, tracks]);
+  }, [selectedTrackPath]);
 
   useEffect(() => {
     writeStoredValue(storageKeys.equalizerEnabled, String(isEqualizerEnabled));

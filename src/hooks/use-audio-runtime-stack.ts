@@ -56,28 +56,29 @@ export function useAudioRuntimeStack({
   setTracks,
 }: UseAudioRuntimeStackOptions) {
   const {
-    audioContextRef,
-    canUseEqualizerOnResolvedSource,
     ensureEqualizerGraph,
+    hasEqualizerGraph,
     isEqualizerSupported,
-    resetEqualizerGraph,
+    resumeEqualizerGraph,
   } = useEqualizer({
     audioRef,
     equalizerValues,
     isEqualizerEnabled,
   });
   const {
+    canUseEqualizerOnResolvedSource,
     clearPendingSourceSwap,
     isSwappingSourceRef,
     pendingResumePlaybackRef,
     pendingResumeTimeRef,
+    recoverFromSourceError,
     resolvedTrackSource,
   } = useTrackSource({
     appLanguage,
-    audioContextRef,
     audioRef,
+    hasEqualizerGraph,
     isEqualizerEnabled,
-    resetEqualizerGraph,
+    isPlaying,
     selectedTrackKey,
     selectedTrackPath: selectedTrack.path,
     selectedTrackSource: selectedTrack.source,
@@ -107,7 +108,9 @@ export function useAudioRuntimeStack({
     isTransitioningTrackRef,
     pendingResumePlaybackRef,
     pendingResumeTimeRef,
+    recoverFromSourceError,
     resolvedTrackSource,
+    resumeEqualizerGraph,
     selectedTrackTitle: currentTrackTitle,
     setActiveDuration,
     setIsPlaying,
@@ -134,7 +137,6 @@ export function useAudioRuntimeStack({
 
   return {
     applyEqualizerPreset,
-    audioContextRef,
     canUseEqualizerOnResolvedSource,
     ensureEqualizerGraph,
     handleAudioError,

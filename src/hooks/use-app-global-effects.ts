@@ -1,5 +1,4 @@
 import type { RefObject } from "react";
-import type { LibraryTrack } from "../app/types";
 import { useAppShellEffects } from "./use-app-shell-effects";
 import { useDiscordPresence } from "./use-discord-presence";
 import { useOverlayControls } from "./use-overlay-controls";
@@ -8,7 +7,6 @@ import { usePersistenceSync } from "./use-persistence-sync";
 type UseAppGlobalEffectsOptions = {
   activePlaylistOpen: boolean;
   audioRef: RefObject<HTMLAudioElement | null>;
-  currentTrackIndex: number;
   equalizerPresetMenuRef: RefObject<HTMLDivElement | null>;
   equalizerValues: number[];
   getItunesCover: (query: string, entity: "musicArtist" | "song") => Promise<string | null>;
@@ -21,20 +19,19 @@ type UseAppGlobalEffectsOptions = {
   librarySortMenuRef: RefObject<HTMLDivElement | null>;
   selectedEqualizerPresetId: string;
   selectedTrackArtist: string;
+  selectedTrackPath: string;
   selectedTrackTitle: string;
   setDragOverPlaylistTrackIndex: (value: number | null) => void;
   setDraggedPlaylistTrackIndex: (value: number | null) => void;
   setIsEqualizerPresetMenuOpen: (value: boolean) => void;
   setIsLibrarySortMenuOpen: (value: boolean) => void;
   setPlaylistSelectionQuery: (value: string) => void;
-  tracks: LibraryTrack[];
   volume: number;
 };
 
 export function useAppGlobalEffects({
   activePlaylistOpen,
   audioRef,
-  currentTrackIndex,
   equalizerPresetMenuRef,
   equalizerValues,
   getItunesCover,
@@ -47,22 +44,21 @@ export function useAppGlobalEffects({
   librarySortMenuRef,
   selectedEqualizerPresetId,
   selectedTrackArtist,
+  selectedTrackPath,
   selectedTrackTitle,
   setDragOverPlaylistTrackIndex,
   setDraggedPlaylistTrackIndex,
   setIsEqualizerPresetMenuOpen,
   setIsLibrarySortMenuOpen,
   setPlaylistSelectionQuery,
-  tracks,
   volume,
 }: UseAppGlobalEffectsOptions) {
   usePersistenceSync({
-    currentTrackIndex,
     equalizerValues,
     hideOnTray,
     isEqualizerEnabled,
     selectedEqualizerPresetId,
-    tracks,
+    selectedTrackPath,
     volume,
   });
 

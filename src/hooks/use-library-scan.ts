@@ -26,6 +26,7 @@ type UseLibraryScanOptions = {
   collectionName: string;
   currentTrackIndex: number;
   emptyTrack: LibraryTrack;
+  selectedTrack: LibraryTrack;
   isPlaying: boolean;
   playbackPlaylistId: string | null;
   revokeBrowserSources: () => void;
@@ -50,7 +51,6 @@ type UseLibraryScanOptions = {
   setStatusMessage: (value: string) => void;
   setUpdatedBrowserSources: (sources: string[]) => void;
   statusMessage: string;
-  tracks: LibraryTrack[];
 };
 
 export function useLibraryScan({
@@ -79,10 +79,30 @@ export function useLibraryScan({
   setTracks,
   setStatusMessage,
   setUpdatedBrowserSources,
+  selectedTrack,
   statusMessage,
-  tracks,
 }: UseLibraryScanOptions) {
   const scannedPathRef = useRef<string | null>(null);
+  // A scan resolves seconds after it started. Its result must be merged into
+  // the state as it is *then* (the user may have changed track or edited a
+  // playlist meanwhile), not into the state captured when the scan began.
+  const latestStateRef = useRef({
+    activePlaylistId,
+    currentTrackIndex,
+    isPlaying,
+    playbackPlaylistId,
+    savedPlaylists,
+    selectedTrack,
+  });
+  latestStateRef.current = {
+    activePlaylistId,
+    currentTrackIndex,
+    isPlaying,
+    playbackPlaylistId,
+    savedPlaylists,
+    selectedTrack,
+  };
+  const scanGenerationRef = useRef(0);
   const bannerTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scanFolderPathRef = useRef<
     (folderPath: string, mode?: "manual" | "restore", preservePlayback?: boolean) => Promise<void>
@@ -102,18 +122,21 @@ export function useLibraryScan({
       );
     }
 
+    const latest = latestStateRef.current;
     const sanitizedTracks = result.tracks.map(sanitizeTrack);
-    const reconciledPlaylists = reconcilePlaylistsWithLibrary(savedPlaylists, sanitizedTracks);
+    const reconciledPlaylists = reconcilePlaylistsWithLibrary(latest.savedPlaylists, sanitizedTracks);
     const nextActivePlaylist =
-      activePlaylistId !== null
-        ? reconciledPlaylists.find((playlist) => playlist.id === activePlaylistId) ?? null
+      latest.activePlaylistId !== null
+        ? reconciledPlaylists.find((playlist) => playlist.id === latest.activePlaylistId) ?? null
         : null;
     const nextPlaybackPlaylist =
-      playbackPlaylistId !== null
-        ? reconciledPlaylists.find((playlist) => playlist.id === playbackPlaylistId) ?? null
+      latest.playbackPlaylistId !== null
+        ? reconciledPlaylists.find((playlist) => playlist.id === latest.playbackPlaylistId) ?? null
         : null;
     const nextPlaybackTracks = nextPlaybackPlaylist ? nextPlaybackPlaylist.tracks : sanitizedTracks;
-    const currentSelectedTrack = tracks[currentTrackIndex] ?? emptyTrack;
+    // The track that is really playing (it may come from a playlist, so it is
+    // not `tracks[currentTrackIndex]`).
+    const currentSelectedTrack = latest.selectedTrack ?? emptyTrack;
     const searchTrack =
       currentSelectedTrack.path || currentSelectedTrack.title !== emptyTrack.title
         ? currentSelectedTrack
@@ -127,21 +150,24 @@ export function useLibraryScan({
 
     setCollectionName(result.collectionName);
     setTracks(sanitizedTracks);
-    setSavedPlaylists(reconciledPlaylists);
+    // Functional update: keep playlist edits made after `latest` was read.
+    setSavedPlaylists((previousPlaylists) =>
+      reconcilePlaylistsWithLibrary(previousPlaylists, sanitizedTracks),
+    );
     setScannedPath(result.scannedPath);
     scannedPathRef.current = result.scannedPath;
     setActivePlaylistId(nextActivePlaylist?.id ?? null);
     setPlaybackPlaylistId(nextPlaybackPlaylist?.id ?? null);
 
     if (preservePlayback && nextPlaybackIndex >= 0) {
-      if (nextPlaybackIndex !== currentTrackIndex) {
+      if (nextPlaybackIndex !== latest.currentTrackIndex) {
         setCurrentTrackIndex(nextPlaybackIndex);
       }
     } else {
       setCurrentTrackIndex(nextPlaybackIndex >= 0 ? nextPlaybackIndex : 0);
       setPlaybackTime(0);
       setActiveDuration(0);
-      setIsPlaying(nextPlaybackIndex >= 0 ? isPlaying : false);
+      setIsPlaying(nextPlaybackIndex >= 0 ? latest.isPlaying : false);
     }
   }
 
@@ -150,9 +176,16 @@ export function useLibraryScan({
     mode: "manual" | "restore" = "manual",
     preservePlayback = false,
   ) {
+    const generation = scanGenerationRef.current + 1;
+    scanGenerationRef.current = generation;
     const result = await invoke<LibraryScan>("scan_music_folder", {
       folderPath,
     });
+
+    // A newer scan was started meanwhile; its result wins.
+    if (generation !== scanGenerationRef.current) {
+      return;
+    }
 
     applyScanResult(result, preservePlayback);
     writeStoredValue(storageKeys.lastFolderPath, folderPath);
@@ -264,10 +297,13 @@ export function useLibraryScan({
 
       await scanFolderPath(folderPath);
     } catch (error) {
+      // Tauri rejects with the Rust error string, not an Error instance.
       const message =
         error instanceof Error
           ? error.message
-          : appLanguage === "es"
+          : typeof error === "string" && error.trim()
+            ? error
+            : appLanguage === "es"
             ? "No se pudo escanear la carpeta."
             : "The folder could not be scanned.";
 

@@ -138,7 +138,7 @@ function normalizeLyricsLineText(value: string) {
     .trim();
 }
 
-function parseSyncedLyrics(lyrics: string): LyricsLine[] {
+export function parseSyncedLyrics(lyrics: string): LyricsLine[] {
   const parsedLines: LyricsLine[] = [];
   const rawLines = lyrics.split(/\r?\n/);
 
@@ -174,7 +174,7 @@ function parseSyncedLyrics(lyrics: string): LyricsLine[] {
   return parsedLines.sort((left, right) => (left.startTimeMs ?? 0) - (right.startTimeMs ?? 0));
 }
 
-function parsePlainLyrics(lyrics: string): LyricsLine[] {
+export function parsePlainLyrics(lyrics: string): LyricsLine[] {
   return lyrics
     .split(/\r?\n/)
     .map((line, index) => ({

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import type { MutableRefObject, RefObject } from "react";
+import { planQueueUpdate, type QueueBuildState } from "../app/queue";
 import type { LibrarySortKey, LibraryTrack, RepeatMode } from "../app/types";
 import {
   buildShuffledQueueFromIndices,
@@ -48,7 +49,7 @@ export function usePlaybackNavigation({
   setPlaybackPlaylistId,
   setPlaybackTime,
 }: UsePlaybackNavigationOptions) {
-  const queueSignatureRef = useRef("");
+  const queueBuildStateRef = useRef<QueueBuildState | null>(null);
   const hasLibrary = playbackTracks.length > 0;
   const [shuffleEnabled, setShuffleEnabled] = useState(false);
   const [repeatMode, setRepeatMode] = useState<RepeatMode>("off");
@@ -61,9 +62,20 @@ export function usePlaybackNavigation({
       return;
     }
 
+    const audio = audioRef.current;
+
+    // Same track again (e.g. "repeat all" over a one-track queue): the source
+    // does not change, so nothing else would restart the ended element.
+    if (nextIndex === currentTrackIndex && shouldAutoplay && audio?.ended) {
+      audio.currentTime = 0;
+      void audio.play().catch(() => {
+        setIsPlaying(false);
+      });
+    }
+
     setCurrentTrackIndex(nextIndex);
     setPlaybackTime(0);
-    setActiveDuration(0);
+    setActiveDuration(nextIndex === currentTrackIndex && audio ? audio.duration || 0 : 0);
 
     if (shouldAutoplay) {
       setIsPlaying(true);
@@ -125,6 +137,15 @@ export function usePlaybackNavigation({
     const safePosition = positionInDisplay >= 0 ? positionInDisplay : 0;
 
     setPlaybackPlaylistId(activePlaylistId);
+
+    // Same source: remember the visible order as the pre-shuffle order. (A
+    // source change is picked up by the queue effect, which rebuilds it.)
+    if (activePlaylistId === playbackPlaylistId && queueBuildStateRef.current) {
+      queueBuildStateRef.current = {
+        ...queueBuildStateRef.current,
+        linearBase: [...displayIndices],
+      };
+    }
 
     if (shuffleEnabled) {
       setPlaybackQueue(buildShuffledQueueFromIndices(displayIndices, safePosition));
@@ -201,65 +222,31 @@ export function usePlaybackNavigation({
     });
   }
 
+  // The queue belongs to the list that is playing. The visible list only
+  // shapes it when it IS that list; browsing another view or typing in the
+  // search box never reshapes a running queue (see planQueueUpdate).
   useEffect(() => {
-    if (playbackTracks.length === 0) {
-      queueSignatureRef.current = "";
+    const plan = planQueueUpdate({
+      previous: queueBuildStateRef.current,
+      sourceId: playbackPlaylistId ?? "library",
+      sourceLength: playbackTracks.length,
+      shuffle: shuffleEnabled,
+      sortKey: librarySortKey,
+      currentIndex: currentTrackIndex,
+      queue: playbackQueue,
+      queuePosition,
+      viewIndices: activePlaylistId === playbackPlaylistId ? displayTrackIndicesRef.current : null,
+    });
 
-      if (playbackQueue.length > 0) {
-        setPlaybackQueue([]);
-      }
-
-      if (queuePosition !== 0) {
-        setQueuePosition(0);
-      }
-
-      return;
-    }
-
-    const displayIndices = displayTrackIndicesRef.current.filter(
-      (trackIndex) => trackIndex >= 0 && trackIndex < playbackTracks.length,
-    );
-    const fallbackIndices = playbackTracks.map((_, trackIndex) => trackIndex);
-    const boundedCurrentIndex = Math.min(currentTrackIndex, playbackTracks.length - 1);
-    const sourceIndices =
-      displayIndices.length > 0 ? displayIndices : fallbackIndices;
-    const shouldRebuildAgainstVisibleSource = sourceIndices.includes(boundedCurrentIndex);
-    const queueBaseIndices = shouldRebuildAgainstVisibleSource
-      ? sourceIndices
-      : playbackQueue.length > 0
-        ? playbackQueue
-        : fallbackIndices;
-    const queueBaseSet = new Set(queueBaseIndices);
-    const nextSignature = `${playbackPlaylistId ?? "library"}::${shuffleEnabled ? "shuffle" : "linear"}::${queueBaseIndices.join(",")}`;
-    const queueMatchesSource =
-      playbackQueue.length === queueBaseIndices.length &&
-      playbackQueue.every((trackIndex) => queueBaseSet.has(trackIndex));
-    const currentQueuePosition = playbackQueue.findIndex(
-      (trackIndex) => trackIndex === boundedCurrentIndex,
-    );
-
-    if (
-      queueSignatureRef.current !== nextSignature ||
-      !queueMatchesSource ||
-      (shouldRebuildAgainstVisibleSource && currentQueuePosition < 0)
-    ) {
-      const positionInDisplay = queueBaseIndices.indexOf(boundedCurrentIndex);
-      const safePosition = positionInDisplay >= 0 ? positionInDisplay : 0;
-
-      const nextQueue = shuffleEnabled
-        ? buildShuffledQueueFromIndices(queueBaseIndices, safePosition)
-        : [...queueBaseIndices];
-
-      queueSignatureRef.current = nextSignature;
-      setPlaybackQueue(nextQueue);
-      setQueuePosition(Math.max(nextQueue.indexOf(boundedCurrentIndex), 0));
-      return;
-    }
-
-    if (queuePosition !== currentQueuePosition) {
-      setQueuePosition(currentQueuePosition);
+    if (plan.kind === "rebuild") {
+      queueBuildStateRef.current = plan.state;
+      setPlaybackQueue(plan.queue);
+      setQueuePosition(plan.position);
+    } else if (plan.kind === "position") {
+      setQueuePosition(plan.position);
     }
   }, [
+    activePlaylistId,
     currentTrackIndex,
     displayTrackIndicesRef,
     librarySortKey,

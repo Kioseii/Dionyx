@@ -65,7 +65,8 @@ function App() {
   const {
     activeDuration,
     collectionName,
-    currentTrackIndex,
+    currentTrackIndex: storedTrackIndex,
+    currentTrackIndexSetExplicitlyRef,
     isBannerVisible,
     isPlaying,
     isScanning,
@@ -86,6 +87,7 @@ function App() {
     setStatusMessage,
     setTracks,
     statusMessage,
+    syncCurrentTrackIndex,
     tracks,
   } = useLibraryRuntimeState({
     defaultCollectionName: copy.defaultCollectionName,
@@ -152,6 +154,7 @@ function App() {
     closeTrackPlaylistModal,
     createPlaylistFromCurrentSource,
     createPlaylistWithTrack,
+    currentTrackIndex,
     deletePlaylist,
     displayTrackRows,
     dragOverPlaylistTrackIndex,
@@ -220,7 +223,8 @@ function App() {
     audioPreloadRef,
     audioRef,
     collectionName,
-    currentTrackIndex,
+    currentTrackIndex: storedTrackIndex,
+    currentTrackIndexSetExplicitlyRef,
     displayTrackIndicesRef,
     handleSeek,
     ignoreNextRowClickRef,
@@ -235,6 +239,7 @@ function App() {
     setIsPlaying,
     setPlaybackTime,
     setStatusMessage,
+    syncCurrentTrackIndex,
     tracks,
   });
   const {
@@ -267,8 +272,8 @@ function App() {
     setStatusMessage,
     setTracks,
     setUpdatedBrowserSources,
+    selectedTrack,
     statusMessage,
-    tracks,
   });
   const {
     closeDownloadModal,
@@ -372,14 +377,11 @@ function App() {
     trackMenuRef,
   } = useTrackManagement({
     copy,
-    currentTrackIndex,
-    savedPlaylists,
-    setCurrentTrackIndex,
+    selectedTrackKey,
     setIsPlaying,
     setSavedPlaylists,
     setStatusMessage,
     setTracks,
-    tracks,
   });
   const {
     RepeatIcon,
@@ -774,7 +776,6 @@ function App() {
   useAppGlobalEffects({
     activePlaylistOpen: Boolean(activePlaylist),
     audioRef,
-    currentTrackIndex,
     equalizerPresetMenuRef,
     equalizerValues,
     getItunesCover,
@@ -787,13 +788,13 @@ function App() {
     librarySortMenuRef,
     selectedEqualizerPresetId,
     selectedTrackArtist: selectedTrack.artist,
+    selectedTrackPath: selectedTrack.path,
     selectedTrackTitle: selectedTrack.title,
     setDragOverPlaylistTrackIndex,
     setDraggedPlaylistTrackIndex,
     setIsEqualizerPresetMenuOpen,
     setIsLibrarySortMenuOpen,
     setPlaylistSelectionQuery,
-    tracks,
     volume,
   });
 

@@ -14,9 +14,7 @@ type TrackManagementCopy = {
 
 type UseTrackManagementOptions = {
   copy: TrackManagementCopy;
-  currentTrackIndex: number;
-  savedPlaylists: SavedPlaylist[];
-  setCurrentTrackIndex: (value: number) => void;
+  selectedTrackKey: string;
   setIsPlaying: (value: boolean) => void;
   setSavedPlaylists: (
     value: SavedPlaylist[] | ((previousPlaylists: SavedPlaylist[]) => SavedPlaylist[]),
@@ -25,21 +23,17 @@ type UseTrackManagementOptions = {
   setTracks: (
     value: LibraryTrack[] | ((previousTracks: LibraryTrack[]) => LibraryTrack[]),
   ) => void;
-  tracks: LibraryTrack[];
 };
 
 const ARTWORK_MAX_BYTES = 2 * 1024 * 1024;
 
 export function useTrackManagement({
   copy,
-  currentTrackIndex,
-  savedPlaylists,
-  setCurrentTrackIndex,
+  selectedTrackKey,
   setIsPlaying,
   setSavedPlaylists,
   setStatusMessage,
   setTracks,
-  tracks,
 }: UseTrackManagementOptions) {
   const [openTrackMenuIndex, setOpenTrackMenuIndex] = useState<number | null>(null);
   const trackMenuRef = useRef<HTMLDivElement | null>(null);
@@ -92,29 +86,23 @@ export function useTrackManagement({
       await invoke("delete_track_file", { path: track.path });
 
       const trackKey = getTrackKey(track);
-      const nextTracks = tracks.filter((currentTrack) => getTrackKey(currentTrack) !== trackKey);
-      const nextPlaylists = savedPlaylists.map((playlist) => ({
-        ...playlist,
-        tracks: playlist.tracks.filter((currentTrack) => getTrackKey(currentTrack) !== trackKey),
-      }));
 
-      const deletedOriginalIndex = tracks.findIndex(
-        (currentTrack) => getTrackKey(currentTrack) === trackKey,
-      );
-      let nextTrackIndex = currentTrackIndex;
-
-      if (deletedOriginalIndex >= 0) {
-        if (currentTrackIndex > deletedOriginalIndex) {
-          nextTrackIndex = currentTrackIndex - 1;
-        } else if (currentTrackIndex === deletedOriginalIndex) {
-          nextTrackIndex = Math.min(currentTrackIndex, nextTracks.length - 1);
-          setIsPlaying(false);
-        }
+      // The current index is left alone: the stable selection keeps following
+      // the playing track by key, whichever list (library or playlist) it is
+      // in. Deleting the playing track stops playback on its neighbour.
+      if (trackKey === selectedTrackKey) {
+        setIsPlaying(false);
       }
 
-      setTracks(nextTracks);
-      setSavedPlaylists(nextPlaylists);
-      setCurrentTrackIndex(Math.max(0, nextTrackIndex));
+      setTracks((previousTracks) =>
+        previousTracks.filter((currentTrack) => getTrackKey(currentTrack) !== trackKey),
+      );
+      setSavedPlaylists((previousPlaylists) =>
+        previousPlaylists.map((playlist) => ({
+          ...playlist,
+          tracks: playlist.tracks.filter((currentTrack) => getTrackKey(currentTrack) !== trackKey),
+        })),
+      );
       setStatusMessage(copy.trackDeleteSuccess);
     } catch {
       setStatusMessage(copy.trackDeleteError);
