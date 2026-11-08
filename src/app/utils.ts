@@ -381,6 +381,25 @@ export function getFontPresetById(id: string) {
   return fontPresets.find((preset) => preset.id === id) ?? fontPresets[0];
 }
 
+/** WCAG relative luminance of an sRGB color (0 = black, 1 = white). */
+export function relativeLuminance(rgb: { g: number; r: number; b: number }) {
+  const channel = (value: number) => {
+    const c = value / 255;
+    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  };
+
+  return 0.2126 * channel(rgb.r) + 0.7152 * channel(rgb.g) + 0.0722 * channel(rgb.b);
+}
+
+/**
+ * Text/icon color for content drawn on the accent color. Light text stays the
+ * default (the original look on dark accents); light accents (white, pastel,
+ * yellow, light grey) switch to dark text, which white could not be read on.
+ */
+export function getOnAccentColor(accent: { g: number; r: number; b: number }) {
+  return relativeLuminance(accent) > 0.4 ? "#14101c" : "#fefbff";
+}
+
 export function buildThemeStyle(themeColor: string, fontPreset: FontPreset) {
   const accentBase = hexToRgb(themeColor);
   const accentSoft = mixRgb(accentBase, { r: 255, g: 255, b: 255 }, 0.34);
@@ -398,6 +417,7 @@ export function buildThemeStyle(themeColor: string, fontPreset: FontPreset) {
     "--text-soft-rgb": rgbToCss(textSoft),
     "--text-faint-rgb": rgbToCss(textFaint),
     "--text-bright-rgb": rgbToCss(textBright),
+    "--on-accent": getOnAccentColor(accentBase),
     "--app-font-family": fontPreset.bodyFamily,
     "--display-font-family": fontPreset.displayFamily,
   } as CSSProperties;

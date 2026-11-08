@@ -710,7 +710,7 @@ button {
     rgb(var(--accent-rgb)) 0%,
     rgb(var(--accent-deep-rgb)) 100%
   );
-  color: #fefbff;
+  color: var(--on-accent, #fefbff);
   box-shadow: 0 0 28px rgb(var(--accent-rgb) / 0.34);
 }
 
@@ -1367,8 +1367,8 @@ button {
   padding: 8px 18px;
   border-radius: 8px;
   border: none;
-  background: var(--theme-color, #a85eff);
-  color: #fff;
+  background: rgb(var(--accent-rgb));
+  color: var(--on-accent, #fefbff);
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
@@ -2244,6 +2244,8 @@ button {
   min-height: 46px;
   padding: 0 18px;
   border-radius: 999px;
+  /* Subtle background even when active, so text stays light (not --on-accent). */
+  color: rgb(var(--text-bright-rgb));
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02)),
     rgba(255, 255, 255, 0.03);
@@ -2866,8 +2868,8 @@ button {
   flex-shrink: 0;
   height: 36px;
   padding: 0 16px;
-  background: var(--theme-color);
-  color: #fff;
+  background: rgb(var(--accent-rgb));
+  color: var(--on-accent, #fefbff);
   border: none;
   border-radius: 8px;
   font-size: 13px;

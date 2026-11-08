@@ -5,6 +5,13 @@
  * genera el color de tema elegido por el usuario.
  */
 
+/* The download and edit-metadata modals were written against --theme-color,
+   which was never defined (their accents rendered as nothing). Derive it from
+   the user's theme color. */
+.app-shell {
+  --theme-color: rgb(var(--accent-rgb));
+}
+
 /* ── Barra lateral ─────────────────────────────────────────── */
 
 .nav-item {
@@ -40,7 +47,7 @@
   justify-content: center;
   font-size: 11px;
   font-weight: 700;
-  color: #0e0c15;
+  color: var(--on-accent, #fefbff);
   background: rgb(var(--accent-rgb));
 }
 

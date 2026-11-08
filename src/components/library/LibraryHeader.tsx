@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { ChevronLeft, Disc3, Play, Shuffle, UserRound } from "lucide-react";
 import { countLabel, formatTotalDuration } from "../../app/library-groups";
 import { getTrackArtworkSrc } from "../../app/utils";
@@ -7,13 +8,15 @@ import { useShell } from "../layout/ShellContext";
 type LibraryHeaderProps = {
   /** Library indices of the rows on screen (what "Play all" plays). */
   visibleIndices: number[];
+  /** Shown at the right end of the tabs row (the sort control, in Songs). */
+  tabsAside?: ReactNode;
 };
 
 /**
  * Library header: title, counts, play buttons and the Songs / Albums /
  * Artists tabs — or, when an album or artist is open, its own header.
  */
-export function LibraryHeader({ visibleIndices }: LibraryHeaderProps) {
+export function LibraryHeader({ tabsAside, visibleIndices }: LibraryHeaderProps) {
   const shell = useShell();
   const { activeGroup, copy } = shell;
 
@@ -74,6 +77,7 @@ export function LibraryHeader({ visibleIndices }: LibraryHeaderProps) {
         </div>
         {shell.libraryView === "songs" ? <PlayButtons indices={visibleIndices} /> : null}
       </div>
+      <div className="library-tabs-row">
       <div aria-label={copy.home} className="library-tabs" role="tablist">
         {tabs.map((tab) => (
           <button
@@ -87,6 +91,8 @@ export function LibraryHeader({ visibleIndices }: LibraryHeaderProps) {
             {tab.label}
           </button>
         ))}
+      </div>
+      {tabsAside ? <div className="library-tabs-aside">{tabsAside}</div> : null}
       </div>
     </div>
   );

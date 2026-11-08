@@ -125,79 +125,75 @@ export function LibraryPanel({
   const showSortControl = !activePlaylist && !shell.activeGroup && shell.libraryView === "songs";
   const visibleIndices = displayTrackRows.map(({ index }) => index);
 
+  const sortControl = (
+    <div
+      className="sort-control sort-control--compact"
+      ref={librarySortMenuRef}
+    >
+      <span className="sort-label">{copy.sortBy}</span>
+      <button
+        aria-expanded={isLibrarySortMenuOpen}
+        aria-haspopup="menu"
+        className={`sort-trigger ${isLibrarySortMenuOpen ? "open" : ""}`}
+        onClick={() => {
+          onSetIsLibrarySortMenuOpen((currentValue) => !currentValue);
+        }}
+        type="button"
+      >
+        <span>{getLibrarySortLabel(librarySortKey, appLanguage)}</span>
+        <ChevronDown className="sort-trigger-icon" />
+      </button>
+      {isLibrarySortMenuOpen ? (
+        <div
+          aria-label={copy.sortMenuLabel}
+          className="sort-menu"
+          role="menu"
+        >
+          {(
+            [
+              ["title", copy.sortTitle],
+              ["artist", copy.sortArtist],
+              ["album", copy.sortAlbum],
+              ["format", copy.sortFormat],
+              ["duration", copy.sortDuration],
+            ] as const
+          ).map(([sortKey, label]) => (
+            <button
+              className={`sort-menu-item ${librarySortKey === sortKey ? "selected" : ""}`}
+              key={sortKey}
+              onClick={() => {
+                onSetLibrarySortKey(sortKey);
+                onSetIsLibrarySortMenuOpen(() => false);
+              }}
+              role="menuitemradio"
+              type="button"
+            >
+              <span>{label}</span>
+              {librarySortKey === sortKey ? (
+                <Check className="sort-menu-check" />
+              ) : null}
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+
   return (
     <article className="track-panel">
-      {activePlaylist ? null : <LibraryHeader visibleIndices={visibleIndices} />}
-      {activePlaylist || normalizedSearch || showSortControl ? (
-      <div className={`section-heading${activePlaylist ? "" : " section-heading--toolbar"}`}>
-        {activePlaylist ? (
+      {activePlaylist ? null : (
+        <LibraryHeader tabsAside={showSortControl ? sortControl : null} visibleIndices={visibleIndices} />
+      )}
+      {activePlaylist ? (
+        <div className="section-heading">
           <div>
             <p className="eyebrow">{copy.library}</p>
             <h3>{activePlaylist.name}</h3>
           </div>
-        ) : (
-          <span className="muted library-filter-note">
-            {normalizedSearch ? `${copy.filteredBy}: ${searchQuery}` : ""}
-          </span>
-        )}
-        {activePlaylist ? (
-          normalizedSearch ? <span className="muted">{copy.filteredBy}: {searchQuery}</span> : null
-        ) : !showSortControl ? null : (
-          <div className="section-heading-actions">
-            <div
-              className="sort-control"
-              ref={librarySortMenuRef}
-            >
-              <span className="sort-label">{copy.sortBy}</span>
-              <button
-                aria-expanded={isLibrarySortMenuOpen}
-                aria-haspopup="menu"
-                className={`sort-trigger ${isLibrarySortMenuOpen ? "open" : ""}`}
-                onClick={() => {
-                  onSetIsLibrarySortMenuOpen((currentValue) => !currentValue);
-                }}
-                type="button"
-              >
-                <span>{getLibrarySortLabel(librarySortKey, appLanguage)}</span>
-                <ChevronDown className="sort-trigger-icon" />
-              </button>
-              {isLibrarySortMenuOpen ? (
-                <div
-                  aria-label={copy.sortMenuLabel}
-                  className="sort-menu"
-                  role="menu"
-                >
-                  {(
-                    [
-                      ["title", copy.sortTitle],
-                      ["artist", copy.sortArtist],
-                      ["album", copy.sortAlbum],
-                      ["format", copy.sortFormat],
-                      ["duration", copy.sortDuration],
-                    ] as const
-                  ).map(([sortKey, label]) => (
-                    <button
-                      className={`sort-menu-item ${librarySortKey === sortKey ? "selected" : ""}`}
-                      key={sortKey}
-                      onClick={() => {
-                        onSetLibrarySortKey(sortKey);
-                        onSetIsLibrarySortMenuOpen(() => false);
-                      }}
-                      role="menuitemradio"
-                      type="button"
-                    >
-                      <span>{label}</span>
-                      {librarySortKey === sortKey ? (
-                        <Check className="sort-menu-check" />
-                      ) : null}
-                    </button>
-                  ))}
-                </div>
-              ) : null}
-            </div>
-          </div>
-        )}
-      </div>
+          {normalizedSearch ? <span className="muted">{copy.filteredBy}: {searchQuery}</span> : null}
+        </div>
+      ) : normalizedSearch ? (
+        <p className="muted library-filter-note">{`${copy.filteredBy}: ${searchQuery}`}</p>
       ) : null}
 
       {showGroupsGrid ? (

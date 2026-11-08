@@ -4,7 +4,9 @@ import { resolveSelectedTrackIndex } from "./track-selection";
 import type { LibraryTrack, SavedPlaylist } from "./types";
 import {
   findMatchingTrackIndex,
+  getOnAccentColor,
   getTrackKey,
+  hexToRgb,
   reconcilePlaylistsWithLibrary,
   serializePlaylistsForStorage,
 } from "./utils";
@@ -44,6 +46,19 @@ describe("resolveSelectedTrackIndex", () => {
 
   it("keeps the index when the previous track is gone", () => {
     expect(resolveSelectedTrackIndex([a, c], 1, getTrackKey(b), false)).toBe(1);
+  });
+});
+
+describe("getOnAccentColor", () => {
+  it("keeps light text on the default and other dark accents", () => {
+    expect(getOnAccentColor(hexToRgb("#A85EFF"))).toBe("#fefbff");
+    expect(getOnAccentColor(hexToRgb("#2B3A66"))).toBe("#fefbff");
+  });
+
+  it("switches to dark text on light accents", () => {
+    expect(getOnAccentColor(hexToRgb("#E6E2EA"))).toBe("#14101c");
+    expect(getOnAccentColor(hexToRgb("#FFFFFF"))).toBe("#14101c");
+    expect(getOnAccentColor(hexToRgb("#FFE45E"))).toBe("#14101c");
   });
 });
 

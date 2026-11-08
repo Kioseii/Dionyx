@@ -68,7 +68,7 @@
 .library-play-button.primary {
   border-color: transparent;
   background: linear-gradient(135deg, rgb(var(--accent-rgb)) 0%, rgb(var(--accent-deep-rgb)) 100%);
-  color: #fefbff;
+  color: var(--on-accent, #fefbff);
   box-shadow: 0 8px 22px rgb(var(--accent-rgb) / 0.26);
 }
 
@@ -81,10 +81,46 @@
   cursor: default;
 }
 
+.library-tabs-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
 .library-tabs {
   display: flex;
   gap: 4px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.library-tabs-aside {
+  display: flex;
+  align-items: center;
+  padding-bottom: 4px;
+}
+
+/* Compact sort control that lives in the tabs row. */
+.sort-control--compact {
+  gap: 8px;
+}
+
+.sort-control--compact .sort-label {
+  font-size: 0.76rem;
+}
+
+.sort-control--compact .sort-trigger {
+  min-width: 0;
+  min-height: 30px;
+  gap: 6px;
+  padding: 0 10px 0 12px;
+  font-size: 0.82rem;
+}
+
+.sort-control--compact .sort-trigger-icon {
+  width: 14px;
+  height: 14px;
 }
 
 .library-tab {
@@ -111,12 +147,8 @@
   border-bottom-color: rgb(var(--accent-rgb));
 }
 
-.section-heading--toolbar {
-  margin-top: 12px;
-  align-items: center;
-}
-
 .library-filter-note {
+  margin: 10px 0 0;
   font-size: 0.85rem;
 }
 
@@ -309,7 +341,7 @@
   border: none;
   border-radius: 50%;
   background: rgb(var(--accent-rgb));
-  color: #0e0c15;
+  color: var(--on-accent, #fefbff);
   box-shadow: 0 10px 22px rgba(0, 0, 0, 0.45);
   cursor: pointer;
   opacity: 0;
