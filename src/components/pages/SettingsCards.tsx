@@ -49,6 +49,44 @@ export function PlaybackSettingsCard() {
   );
 }
 
+/** Settings card: list of keyboard shortcuts (see app/shortcuts.ts). */
+export function ShortcutsSettingsCard() {
+  const { copy } = useShell();
+  const mod = typeof navigator !== "undefined" && /Mac/i.test(navigator.platform) ? "⌘" : "Ctrl";
+  const rows: Array<[string[], string]> = [
+    [[copy.spaceKey], copy.shortcutPlayPause],
+    [["←", "→"], copy.shortcutSeek],
+    [[`${mod} ←`, `${mod} →`], copy.shortcutTrack],
+    [[`${mod} ↑`, `${mod} ↓`], copy.shortcutVolume],
+    [["M"], copy.shortcutMute],
+    [[`${mod} F`, "/"], copy.shortcutSearch],
+    [["L"], copy.shortcutLyrics],
+    [["Q"], copy.shortcutQueue],
+    [["F"], copy.shortcutNowPlaying],
+    [["S", "R"], copy.shortcutShuffleRepeat],
+  ];
+
+  return (
+    <div className="settings-card">
+      <span className="font-preset-label">{copy.shortcutsSection}</span>
+      <strong>{copy.shortcutsTitle}</strong>
+      <p className="muted settings-copy">{copy.shortcutsHint}</p>
+      <dl className="shortcut-list">
+        {rows.map(([keys, label]) => (
+          <div className="shortcut-row" key={label}>
+            <dt>{label}</dt>
+            <dd>
+              {keys.map((key) => (
+                <kbd key={key}>{key}</kbd>
+              ))}
+            </dd>
+          </div>
+        ))}
+      </dl>
+    </div>
+  );
+}
+
 /** Settings card: app name and version. */
 export function AboutSettingsCard() {
   const { copy } = useShell();

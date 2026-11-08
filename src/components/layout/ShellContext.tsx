@@ -2,6 +2,7 @@ import { createContext, useContext } from "react";
 import type { LibraryFilter, TrackGroup } from "../../app/library-groups";
 import type { AppLanguage, LibraryTrack, SavedPlaylist } from "../../app/types";
 import type { LibraryView } from "../../hooks/use-library-browse";
+import type { useSleepTimer } from "../../hooks/use-sleep-timer";
 import type { uiText } from "../../app/ui";
 
 export type DetailPanelTab = "now" | "lyrics" | "queue";
@@ -18,6 +19,7 @@ export type ShellContextValue = {
   /** Accent follows the playing cover (falls back to the chosen color). */
   accentFromArtwork: boolean;
   onToggleAccentFromArtwork: () => void;
+  sleepTimer: Omit<ReturnType<typeof useSleepTimer>, "consumeEndOfTrack">;
   activeDownloadCount: number;
   /** Page shown in the main area, or null for the library / Discover. */
   activePage: ShellPage | null;

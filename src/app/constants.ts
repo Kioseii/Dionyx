@@ -20,6 +20,7 @@ export const supportedAudioAccept =
 export const storageKeys = {
   lastFolderPath: "dionyx:last-folder-path",
   lastTrackPath: "dionyx:last-track-path",
+  lastPosition: "dionyx:last-position",
   volume: "dionyx:volume",
   playlists: "dionyx:playlists",
   themeColor: "dionyx:theme-color",

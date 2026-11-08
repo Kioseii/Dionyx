@@ -32,6 +32,10 @@ import { useLibraryScan } from "./hooks/use-library-scan";
 import { getAlbumKey, getArtistKey } from "./app/library-groups";
 import { useMediaSession } from "./hooks/use-media-session";
 import { useArtworkAccent } from "./hooks/use-artwork-accent";
+import { useKeyboardShortcuts } from "./hooks/use-keyboard-shortcuts";
+import { useResumePosition } from "./hooks/use-resume-position";
+import { useSleepTimer } from "./hooks/use-sleep-timer";
+import { SHORTCUT_SEEK_SECONDS, SHORTCUT_VOLUME_STEP } from "./app/shortcuts";
 import { getTrackArtworkSrc } from "./app/utils";
 import { useLibraryRuntimeState } from "./hooks/use-library-runtime-state";
 import { useMainStageHostOptions } from "./hooks/use-main-stage-host-options";
@@ -422,6 +426,40 @@ function App() {
     setStatusMessage,
     setTracks,
   });
+  // Sleep timer: fade the volume out over ~3 s, then pause and restore it.
+  const sleepTimer = useSleepTimer(() => {
+    const audio = audioRef.current;
+    if (!audio || audio.paused) {
+      return;
+    }
+
+    const startVolume = audio.volume;
+    const steps = 30;
+    let step = 0;
+    const fade = window.setInterval(() => {
+      step += 1;
+      audio.volume = Math.max(0, startVolume * (1 - step / steps));
+      if (step >= steps) {
+        window.clearInterval(fade);
+        audio.pause();
+        audio.volume = startVolume;
+      }
+    }, 100);
+  });
+  const handleTrackEndedWithSleepTimer = () => {
+    if (sleepTimer.consumeEndOfTrack()) {
+      setIsPlaying(false);
+      return;
+    }
+    handleTrackEnded();
+  };
+  useResumePosition({
+    audioRef,
+    isPlaying,
+    playbackTime,
+    selectedTrackPath: selectedTrack.path ?? "",
+    setPlaybackTime,
+  });
   const artworkAccent = useArtworkAccent(getTrackArtworkSrc(selectedTrack), accentFromArtwork);
   const {
     RepeatIcon,
@@ -553,7 +591,7 @@ function App() {
       handleAudioLoadedMetadata,
       handleAudioPause,
       handleAudioPlay,
-      handleTrackEnded,
+      handleTrackEnded: handleTrackEndedWithSleepTimer,
       onDiscoverPreviewEnded: handleDiscoverPreviewEnded,
       onDiscoverPreviewError: handleDiscoverPreviewError,
       onDiscoverPreviewPause: handleDiscoverPreviewPause,
@@ -889,6 +927,13 @@ function App() {
   };
 
   const shellValue: ShellContextValue = {
+    sleepTimer: {
+      cancel: sleepTimer.cancel,
+      remainingMs: sleepTimer.remainingMs,
+      startEndOfTrack: sleepTimer.startEndOfTrack,
+      startMinutes: sleepTimer.startMinutes,
+      timer: sleepTimer.timer,
+    },
     accentFromArtwork,
     onToggleAccentFromArtwork: () => setAccentFromArtwork(!accentFromArtwork),
     activePage,
@@ -984,6 +1029,40 @@ function App() {
     scannedPath,
     statusMessage,
   };
+
+  const lastAudibleVolumeRef = useRef(volume > 0 ? volume : 0.7);
+  if (volume > 0) {
+    lastAudibleVolumeRef.current = volume;
+  }
+
+  const seekBy = (seconds: number) => {
+    const audio = audioRef.current;
+    if (!audio || !Number.isFinite(audio.duration)) {
+      return;
+    }
+    handleSeek(Math.min(Math.max(audio.currentTime + seconds, 0), audio.duration));
+  };
+
+  useKeyboardShortcuts({
+    "cycle-repeat": cycleRepeatMode,
+    "focus-search": () => {
+      const search = document.getElementById("track-search") as HTMLInputElement | null;
+      search?.focus();
+      search?.select();
+    },
+    "next-track": playNextTrack,
+    "previous-track": playPreviousTrack,
+    "seek-back": () => seekBy(-SHORTCUT_SEEK_SECONDS),
+    "seek-forward": () => seekBy(SHORTCUT_SEEK_SECONDS),
+    "toggle-lyrics": () => shellValue.onShowDetailPanel("lyrics"),
+    "toggle-mute": () => setVolume(volume > 0 ? 0 : lastAudibleVolumeRef.current),
+    "toggle-now-playing": () => (nowPlayingOpen ? setNowPlayingOpen(false) : shellValue.onOpenNowPlaying()),
+    "toggle-playback": () => void handleTogglePlaybackRequest(),
+    "toggle-queue": () => shellValue.onShowDetailPanel("queue"),
+    "toggle-shuffle": toggleShuffle,
+    "volume-down": () => setVolume(Math.max(0, Math.round((volume - SHORTCUT_VOLUME_STEP) * 100) / 100)),
+    "volume-up": () => setVolume(Math.min(1, Math.round((volume + SHORTCUT_VOLUME_STEP) * 100) / 100)),
+  }, !miniMode);
 
   return (
     <ShellProvider value={shellValue}>

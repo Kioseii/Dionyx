@@ -13,6 +13,7 @@ import {
   SlidersHorizontal,
 } from "lucide-react";
 import { useShell } from "../layout/ShellContext";
+import { SleepTimerButton } from "./SleepTimerButton";
 import type { AppLanguage, LibraryTrack, RepeatMode } from "../../app/types";
 import { formatTime } from "../../app/utils";
 
@@ -284,6 +285,7 @@ export function PlayerBar({
           >
             <PictureInPicture2 aria-hidden="true" size={17} strokeWidth={2} />
           </button>
+          <SleepTimerButton />
         </div>
         <button
           aria-label={appLanguage === "es" ? "Velocidad de reproducción" : "Playback speed"}
