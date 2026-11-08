@@ -9,6 +9,10 @@ type PlaylistCopy = {
   markTracks: string;
   name: string;
   searchSongsToAdd: string;
+  selectAllTracks: string;
+  selectAllResults: string;
+  clearTrackSelection: string;
+  selectedTracksCount: string;
   searchTracksPlaceholder: string;
   noSongsToShow: string;
   noSongsToShowBody: string;
@@ -64,6 +68,20 @@ export function PlaylistModal({
     return null;
   }
 
+  const visibleKeys = filteredPlaylistCandidateTracks.map(getTrackKey);
+  const selectedKeySet = new Set(selectedPlaylistTrackKeys);
+  const allVisibleSelected = visibleKeys.length > 0 && visibleKeys.every((key) => selectedKeySet.has(key));
+  const isFiltered = playlistSelectionQuery.trim().length > 0;
+
+  // onToggleTrack updates from the previous keys, so toggling several in a row is safe.
+  const toggleAllVisible = () => {
+    for (const key of visibleKeys) {
+      if (allVisibleSelected || !selectedKeySet.has(key)) {
+        onToggleTrack(key);
+      }
+    }
+  };
+
   return (
     <ModalFrame
       labelledBy="playlist-modal-title"
@@ -109,11 +127,23 @@ export function PlaylistModal({
             value={playlistSelectionQuery}
           />
         </label>
+        {visibleKeys.length > 0 ? (
+          <div className="playlist-picker-toolbar">
+            <span className="playlist-picker-count">
+              {copy.selectedTracksCount}: {selectedPlaylistTrackKeys.length}
+            </span>
+            <button className="playlist-picker-select-all" onClick={toggleAllVisible} type="button">
+              {allVisibleSelected
+                ? copy.clearTrackSelection
+                : `${isFiltered ? copy.selectAllResults : copy.selectAllTracks} (${visibleKeys.length})`}
+            </button>
+          </div>
+        ) : null}
         <div className="playlist-picker-list">
           {filteredPlaylistCandidateTracks.length > 0 ? (
             filteredPlaylistCandidateTracks.map((track) => {
               const trackKey = getTrackKey(track);
-              const isSelected = selectedPlaylistTrackKeys.includes(trackKey);
+              const isSelected = selectedKeySet.has(trackKey);
 
               return (
                 <label className={`playlist-picker-item ${isSelected ? "selected" : ""}`} key={trackKey}>

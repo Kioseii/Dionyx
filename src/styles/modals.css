@@ -186,3 +186,42 @@
     transition: none;
   }
 }
+
+/* Crear/editar playlist: contador y "seleccionar todas". */
+.playlist-picker-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 4px 2px -4px;
+}
+
+.playlist-picker-count {
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+  color: rgb(var(--text-soft-rgb) / 0.75);
+}
+
+.playlist-picker-select-all {
+  min-height: 32px;
+  padding: 0 14px;
+  border: 1px solid rgb(var(--accent-soft-rgb) / 0.22);
+  border-radius: 999px;
+  background: rgb(var(--accent-rgb) / 0.1);
+  color: rgb(var(--text-bright-rgb));
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 140ms ease, border-color 140ms ease;
+}
+
+.playlist-picker-select-all:hover {
+  background: rgb(var(--accent-rgb) / 0.2);
+  border-color: rgb(var(--accent-soft-rgb) / 0.4);
+}
+
+.playlist-picker-select-all:focus-visible {
+  outline: 2px solid rgb(var(--accent-rgb) / 0.6);
+  outline-offset: 2px;
+}
