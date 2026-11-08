@@ -304,9 +304,57 @@
   color: rgb(var(--accent-rgb));
 }
 
+/* Queue tab: the card fills the panel and the list scrolls inside it (the
+   old 360px cap came from when the queue sat below the "Playing" card). */
 .detail-panel > .side-card {
   flex: 1;
   min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.detail-panel > .side-card .queue-list {
+  flex: 1;
+  min-height: 0;
+  max-height: none;
+}
+
+/* Compact rows in the side panel: one line for title and one for artist. */
+.detail-panel .queue-item {
+  grid-template-columns: 22px 40px minmax(0, 1fr) auto;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 12px;
+}
+
+.detail-panel .queue-item-artwork {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+}
+
+.detail-panel .queue-item-copy strong,
+.detail-panel .queue-item-copy p {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.detail-panel .queue-item-copy strong {
+  font-size: 0.9rem;
+}
+
+.detail-panel .queue-item-copy p {
+  font-size: 0.8rem;
+}
+
+.detail-panel .queue-item-index {
+  font-size: 0.8rem;
+  text-align: center;
+}
+
+.detail-panel .queue-item-time {
+  font-size: 0.8rem;
 }
 
 /* The "Playing" card used to have a fixed height (it was sized for the old
@@ -325,15 +373,8 @@
 }
 
 /* Up-next rows have no index column: cover · title/artist · duration. */
-.queue-item.up-next-item {
-  grid-template-columns: 42px minmax(0, 1fr) auto;
-}
-
-.up-next-item .queue-item-copy strong,
-.up-next-item .queue-item-copy p {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.detail-panel .queue-item.up-next-item {
+  grid-template-columns: 40px minmax(0, 1fr) auto;
 }
 
 .up-next .eyebrow {
@@ -390,6 +431,11 @@
 
   .volume-value {
     display: none;
+  }
+
+  /* Here the panel stacks below the library without a fixed height. */
+  .detail-panel > .side-card .queue-list {
+    max-height: 420px;
   }
 }
 
