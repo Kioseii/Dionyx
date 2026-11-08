@@ -309,11 +309,31 @@
   min-height: 0;
 }
 
+/* The "Playing" card used to have a fixed height (it was sized for the old
+   content). Let it grow so the panel itself scrolls down to "Up next". The
+   lyrics card keeps its fixed height: its line list scrolls inside it. */
+.detail-panel > .now-card:not(.now-card--lyrics) {
+  height: auto;
+  overflow: visible;
+}
+
 .up-next {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  margin-top: 4px;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+/* Up-next rows have no index column: cover · title/artist · duration. */
+.queue-item.up-next-item {
+  grid-template-columns: 42px minmax(0, 1fr) auto;
+}
+
+.up-next-item .queue-item-copy strong,
+.up-next-item .queue-item-copy p {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .up-next .eyebrow {
