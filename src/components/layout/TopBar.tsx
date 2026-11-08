@@ -40,6 +40,7 @@ export function TopBar({
   supportedAudioAccept,
 }: TopBarProps) {
   const {
+    activePage,
     copy: shellCopy,
     detailPanelOpen,
     isScanning,
@@ -126,6 +127,8 @@ export function TopBar({
         >
           {isScanning ? shellCopy.scanning : shellCopy.scanNow}
         </button>
+        {/* Pages fill the main area without the right panel, so the toggle would do nothing there. */}
+        {activePage ? null : (
         <button
           aria-label={detailPanelOpen ? shellCopy.hidePanel : shellCopy.showPanel}
           aria-pressed={detailPanelOpen}
@@ -136,6 +139,7 @@ export function TopBar({
         >
           <PanelRight size={16} />
         </button>
+        )}
       </div>
     </header>
   );

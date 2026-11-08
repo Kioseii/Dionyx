@@ -193,7 +193,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin: 4px 2px -4px;
+  margin: 2px 2px 12px;
 }
 
 .playlist-picker-count {
