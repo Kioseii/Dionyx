@@ -15,6 +15,9 @@ export type ShellPage = "home" | "downloads" | "appearance" | "settings";
  * cross-cutting values do not have to travel through every props builder.
  */
 export type ShellContextValue = {
+  /** Accent follows the playing cover (falls back to the chosen color). */
+  accentFromArtwork: boolean;
+  onToggleAccentFromArtwork: () => void;
   activeDownloadCount: number;
   /** Page shown in the main area, or null for the library / Discover. */
   activePage: ShellPage | null;

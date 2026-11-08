@@ -25,6 +25,9 @@ export function useAppPreferences() {
   const [themeColor, setThemeColor] = useState(() =>
     sanitizeHexColor(readStoredValue(storageKeys.themeColor)),
   );
+  const [accentFromArtwork, setAccentFromArtwork] = useState(() =>
+    readStoredValue(storageKeys.accentFromArtwork) === "true",
+  );
   const [themeHexDraft, setThemeHexDraft] = useState(() =>
     sanitizeHexColor(readStoredValue(storageKeys.themeColor)),
   );
@@ -57,6 +60,10 @@ export function useAppPreferences() {
   }, [themeColor]);
 
   useEffect(() => {
+    writeStoredValue(storageKeys.accentFromArtwork, String(accentFromArtwork));
+  }, [accentFromArtwork]);
+
+  useEffect(() => {
     writeStoredValue(storageKeys.fontPreset, fontPresetId);
   }, [fontPresetId]);
 
@@ -77,6 +84,7 @@ export function useAppPreferences() {
   }, [hideOnTray]);
 
   return {
+    accentFromArtwork,
     appLanguage,
     detailPanelOpen,
     detailPanelTab,
@@ -88,6 +96,7 @@ export function useAppPreferences() {
     isThemeModalOpen,
     librarySortKey,
     personalizationView,
+    setAccentFromArtwork,
     setAppLanguage,
     setFontPresetId,
     setHideOnTray,

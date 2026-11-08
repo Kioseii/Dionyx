@@ -166,6 +166,14 @@
 
 /* ── Barra superior ────────────────────────────────────────── */
 
+/* Center the icon: as a block button the svg sat on the text baseline, ~3px high. */
+.sidebar-toggle-btn,
+.panel-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .panel-toggle-btn.active {
   color: rgb(var(--accent-rgb));
 }
@@ -495,4 +503,31 @@
   .library-chip-button.is-scanning svg {
     animation: none;
   }
+}
+
+/* Lyrics in the side panel are buttons: click a synced line to jump there. */
+.lyrics-line {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  font: inherit;
+  text-align: left;
+  color: inherit;
+}
+
+.lyrics-line:disabled {
+  cursor: default;
+}
+
+.lyrics-line.seekable {
+  cursor: pointer;
+}
+
+.lyrics-line.seekable:not(.active):hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.lyrics-line:focus-visible {
+  outline: 2px solid rgb(var(--accent-rgb) / 0.6);
+  outline-offset: 2px;
 }

@@ -62,6 +62,7 @@ export function DetailPanel({
   onOpenEqualizer,
   onOpenTrackPlaylistModal,
   onRemoveTrackFromActivePlaylist,
+  onSeek,
   playbackPlaylist,
   playbackQueue,
   queuePosition,
@@ -71,7 +72,7 @@ export function DetailPanel({
 }: DetailPanelProps) {
   const shell = useShell();
   const tab = shell.detailPanelTab;
-  const activeLyricLineRef = useRef<HTMLDivElement | null>(null);
+  const activeLyricLineRef = useRef<HTMLButtonElement | null>(null);
   const lyrics = useTrackLyrics({
     activeDuration,
     displayedPlaybackTime,
@@ -309,18 +310,26 @@ export function DetailPanel({
               {lyrics.status === "ready" && lyrics.lines.length > 0
                 ? lyrics.lines.map((line, index) => {
                   const isActiveLine = lyrics.isSynced && index === lyrics.activeLineIndex;
+                  const canSeek = lyrics.isSynced && typeof line.startTimeMs === "number";
 
                   return (
-                    <div
-                      className={`lyrics-line ${isActiveLine ? "active" : ""}`}
+                    <button
+                      className={`lyrics-line${isActiveLine ? " active" : ""}${canSeek ? " seekable" : ""}`}
+                      disabled={!canSeek}
                       key={line.id}
+                      onClick={() => {
+                        if (canSeek) {
+                          onSeek((line.startTimeMs as number) / 1000);
+                        }
+                      }}
                       ref={isActiveLine ? activeLyricLineRef : null}
+                      type="button"
                     >
-                      <p className="lyrics-line-text">{line.text}</p>
+                      <span className="lyrics-line-text">{line.text}</span>
                       {line.romaji ? (
-                        <p className="lyrics-line-romaji">{line.romaji}</p>
+                        <span className="lyrics-line-romaji">{line.romaji}</span>
                       ) : null}
-                    </div>
+                    </button>
                   );
                 })
                 : null}

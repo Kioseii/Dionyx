@@ -31,6 +31,8 @@ import { useLibraryBrowse } from "./hooks/use-library-browse";
 import { useLibraryScan } from "./hooks/use-library-scan";
 import { getAlbumKey, getArtistKey } from "./app/library-groups";
 import { useMediaSession } from "./hooks/use-media-session";
+import { useArtworkAccent } from "./hooks/use-artwork-accent";
+import { getTrackArtworkSrc } from "./app/utils";
 import { useLibraryRuntimeState } from "./hooks/use-library-runtime-state";
 import { useMainStageHostOptions } from "./hooks/use-main-stage-host-options";
 import { usePlaybackScrub } from "./hooks/use-playback-scrub";
@@ -83,6 +85,8 @@ function App() {
     sidebarOpen,
     themeColor,
     themeHexDraft,
+    accentFromArtwork,
+    setAccentFromArtwork,
   } = useAppPreferences();
   const copy = uiText[appLanguage];
   const {
@@ -418,6 +422,7 @@ function App() {
     setStatusMessage,
     setTracks,
   });
+  const artworkAccent = useArtworkAccent(getTrackArtworkSrc(selectedTrack), accentFromArtwork);
   const {
     RepeatIcon,
     VolumeIcon,
@@ -439,7 +444,7 @@ function App() {
       fontPresetId,
       repeatMode,
       selectedEqualizerPresetId,
-      themeColor,
+      themeColor: artworkAccent ?? themeColor,
       volume,
     },
     windowStateOptions: {
@@ -884,6 +889,8 @@ function App() {
   };
 
   const shellValue: ShellContextValue = {
+    accentFromArtwork,
+    onToggleAccentFromArtwork: () => setAccentFromArtwork(!accentFromArtwork),
     activePage,
     onOpenHome: () => {
       closePages();

@@ -638,6 +638,23 @@ export function PersonalizationModal({
                 </div>
                 <p className="muted modal-hint">{copy.hexHint}</p>
               </label>
+
+              <div className="appearance-switch-row">
+                <div>
+                  <strong id="accent-from-artwork-label">{shell.copy.accentFromArtworkLabel}</strong>
+                  <p className="muted modal-hint">{shell.copy.accentFromArtworkHint}</p>
+                </div>
+                <button
+                  aria-checked={shell.accentFromArtwork}
+                  aria-labelledby="accent-from-artwork-label"
+                  className={`settings-toggle ${shell.accentFromArtwork ? "active" : ""}`}
+                  onClick={shell.onToggleAccentFromArtwork}
+                  role="switch"
+                  type="button"
+                >
+                  <span className="settings-toggle-thumb" />
+                </button>
+              </div>
           </section>
           <section aria-labelledby="appearance-font-title" className="page-card">
             <h2 className="page-card-title" id="appearance-font-title">{copy.fonts}</h2>

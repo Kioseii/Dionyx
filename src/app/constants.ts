@@ -23,6 +23,7 @@ export const storageKeys = {
   volume: "dionyx:volume",
   playlists: "dionyx:playlists",
   themeColor: "dionyx:theme-color",
+  accentFromArtwork: "dionyx:accent-from-artwork",
   fontPreset: "dionyx:font-preset",
   librarySort: "dionyx:library-sort",
   language: "dionyx:language",
