@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { defaultThemeColor, storageKeys } from "../app/constants";
 import type { AppLanguage, LibrarySortKey, PersonalizationView } from "../app/types";
+import type { DetailPanelTab } from "../components/layout/ShellContext";
 import {
   readStoredValue,
   sanitizeAppLanguage,
@@ -35,6 +36,21 @@ export function useAppPreferences() {
     sanitizeLibrarySortKey(readStoredValue(storageKeys.librarySort)),
   );
   const [isLibrarySortMenuOpen, setIsLibrarySortMenuOpen] = useState(false);
+  const [detailPanelOpen, setDetailPanelOpen] = useState(() =>
+    readStoredValue(storageKeys.detailPanelOpen) !== "false",
+  );
+  const [detailPanelTab, setDetailPanelTab] = useState<DetailPanelTab>(() => {
+    const stored = readStoredValue(storageKeys.detailPanelTab);
+    return stored === "lyrics" || stored === "queue" ? stored : "now";
+  });
+
+  useEffect(() => {
+    writeStoredValue(storageKeys.detailPanelOpen, String(detailPanelOpen));
+  }, [detailPanelOpen]);
+
+  useEffect(() => {
+    writeStoredValue(storageKeys.detailPanelTab, detailPanelTab);
+  }, [detailPanelTab]);
 
   useEffect(() => {
     writeStoredValue(storageKeys.themeColor, themeColor || defaultThemeColor);
@@ -62,6 +78,10 @@ export function useAppPreferences() {
 
   return {
     appLanguage,
+    detailPanelOpen,
+    detailPanelTab,
+    setDetailPanelOpen,
+    setDetailPanelTab,
     fontPresetId,
     hideOnTray,
     isLibrarySortMenuOpen,

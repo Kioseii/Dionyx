@@ -1,0 +1,392 @@
+/*
+ * Shell v2 (etapa 1 del rediseño): barra lateral con accesos, avisos
+ * flotantes, panel derecho con pestañas y barra de reproducción ampliada.
+ * Todo el color sale de --accent-rgb / --accent-soft-rgb / --text-*-rgb, que
+ * genera el color de tema elegido por el usuario.
+ */
+
+/* ── Barra lateral ─────────────────────────────────────────── */
+
+.nav-item {
+  width: 100%;
+  text-align: left;
+}
+
+.nav-item-icon {
+  flex-shrink: 0;
+  color: rgb(var(--text-bright-rgb) / 0.66);
+  transition: color 140ms ease;
+}
+
+.nav-item.active .nav-item-icon,
+.nav-item:hover .nav-item-icon {
+  color: rgb(var(--accent-rgb));
+}
+
+.nav-item--small {
+  padding: 9px 14px;
+  font-size: 14px;
+}
+
+.nav-badge {
+  margin-left: auto;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  box-sizing: border-box;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: #0e0c15;
+  background: rgb(var(--accent-rgb));
+}
+
+.sidebar-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.sidebar-section-header .sidebar-label {
+  margin: 0;
+}
+
+.sidebar-icon-button {
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  border: 1px solid rgb(var(--accent-soft-rgb) / 0.14);
+  background: transparent;
+  color: rgb(var(--text-bright-rgb) / 0.8);
+  cursor: pointer;
+  transition: background 140ms ease, color 140ms ease;
+}
+
+.sidebar-icon-button:hover {
+  color: rgb(var(--accent-rgb));
+  background: rgb(var(--accent-rgb) / 0.12);
+}
+
+.sidebar-footer {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.library-chip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+  padding: 10px 10px 10px 12px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid rgb(var(--accent-soft-rgb) / 0.1);
+}
+
+.library-chip-icon {
+  flex-shrink: 0;
+  color: rgb(var(--text-soft-rgb) / 0.8);
+}
+
+.library-chip-copy {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.library-chip-copy strong {
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.library-chip-copy span {
+  font-size: 12px;
+  color: rgb(var(--text-soft-rgb) / 0.78);
+}
+
+.library-chip-button {
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  border: 1px solid rgb(var(--accent-soft-rgb) / 0.18);
+  background: rgb(var(--accent-rgb) / 0.1);
+  color: rgb(var(--text-bright-rgb));
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 140ms ease;
+}
+
+.library-chip-button:hover:not(:disabled) {
+  background: rgb(var(--accent-rgb) / 0.22);
+}
+
+.library-chip-button:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+.library-chip-button.is-scanning svg {
+  animation: library-chip-spin 1s linear infinite;
+}
+
+@keyframes library-chip-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ── Barra superior ────────────────────────────────────────── */
+
+.panel-toggle-btn.active {
+  color: rgb(var(--accent-rgb));
+}
+
+.topbar-narrow-only {
+  display: none;
+}
+
+/* ── Aviso flotante ────────────────────────────────────────── */
+
+.notice-toast-region {
+  position: fixed;
+  right: 24px;
+  bottom: 116px;
+  z-index: 60;
+  pointer-events: none;
+}
+
+.notice-toast {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: min(440px, calc(100vw - 48px));
+  padding: 12px 8px 12px 14px;
+  border-radius: 14px;
+  background: rgba(22, 18, 32, 0.96);
+  border: 1px solid rgb(var(--accent-soft-rgb) / 0.18);
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(18px);
+  animation: notice-toast-in 180ms ease-out;
+}
+
+.notice-toast-icon {
+  flex-shrink: 0;
+  color: rgb(var(--accent-rgb));
+}
+
+.notice-toast-text {
+  font-size: 14px;
+  line-height: 1.35;
+  color: rgb(var(--text-bright-rgb));
+}
+
+.notice-toast-close {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 9px;
+  background: transparent;
+  color: rgb(var(--text-soft-rgb) / 0.8);
+  cursor: pointer;
+}
+
+.notice-toast-close:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: rgb(var(--text-bright-rgb));
+}
+
+@keyframes notice-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ── Panel derecho con pestañas ────────────────────────────── */
+
+.content-grid--no-detail {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.detail-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.detail-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgb(var(--accent-soft-rgb) / 0.1);
+}
+
+.detail-tab {
+  min-height: 32px;
+  padding: 0 12px;
+  border: none;
+  border-radius: 9px;
+  background: transparent;
+  color: rgb(var(--text-soft-rgb) / 0.78);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 140ms ease, color 140ms ease;
+}
+
+.detail-tab:hover {
+  color: rgb(var(--text-bright-rgb));
+}
+
+.detail-tab.active {
+  background: rgb(var(--accent-rgb) / 0.22);
+  color: rgb(var(--text-bright-rgb));
+  font-weight: 600;
+}
+
+.detail-panel-header-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.detail-icon-button {
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  color: rgb(var(--text-soft-rgb) / 0.82);
+  cursor: pointer;
+  transition: background 140ms ease, color 140ms ease;
+}
+
+.detail-icon-button:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: rgb(var(--accent-rgb));
+}
+
+.detail-panel > .side-card {
+  flex: 1;
+  min-height: 0;
+}
+
+.up-next {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 4px;
+}
+
+.up-next .eyebrow {
+  margin: 0 0 6px;
+}
+
+/* ── Barra de reproducción ─────────────────────────────────── */
+
+.player-bar {
+  grid-template-columns: minmax(0, 300px) minmax(180px, 1fr) minmax(0, 440px);
+}
+
+.player-cover-ring {
+  width: 68px;
+  height: 68px;
+}
+
+.player-shortcuts {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.player-tool-button {
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  color: rgb(var(--text-bright-rgb) / 0.72);
+  cursor: pointer;
+  transition: background 140ms ease, color 140ms ease;
+}
+
+.player-tool-button:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: rgb(var(--text-bright-rgb));
+}
+
+.player-tool-button.active {
+  color: rgb(var(--accent-rgb));
+  background: rgb(var(--accent-rgb) / 0.14);
+}
+
+/* ── Ventanas estrechas ────────────────────────────────────── */
+
+@media (max-width: 1180px) {
+  .player-bar {
+    grid-template-columns: minmax(0, 240px) minmax(160px, 1fr) minmax(0, 360px);
+  }
+
+  .volume-value {
+    display: none;
+  }
+}
+
+@media (max-width: 900px) {
+  /* The sidebar is hidden here: its shortcuts move to the top bar. */
+  .topbar-narrow-only {
+    display: inline-flex;
+  }
+
+  .player-shortcuts .player-tool-button:nth-child(n + 3) {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .notice-toast,
+  .library-chip-button.is-scanning svg {
+    animation: none;
+  }
+}

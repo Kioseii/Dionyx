@@ -4,6 +4,8 @@ import { equalizerBandsConfig, supportedAudioAccept } from "./app/constants";
 import { getEmptyTrack, uiText } from "./app/ui";
 import { AppModalsHost } from "./components/modals/AppModalsHost";
 import { AppMainStageHost } from "./components/layout/AppMainStageHost";
+import { NoticeToast } from "./components/layout/NoticeToast";
+import { type DetailPanelTab, ShellProvider, type ShellContextValue } from "./components/layout/ShellContext";
 import { TitleBar } from "./components/layout/TitleBar";
 import { AudioNodes } from "./components/player/AudioNodes";
 import { MiniPlayerOverlay } from "./components/player/MiniPlayerOverlay";
@@ -30,6 +32,7 @@ import { usePlaylistLibraryStack } from "./hooks/use-playlist-library-stack";
 import { useSidebarHostOptions } from "./hooks/use-sidebar-host-options";
 import { useTrackManagement } from "./hooks/use-track-management";
 import "./App.css";
+import "./styles/shell.css";
 
 function App() {
   const directoryInputRef = useRef<HTMLInputElement | null>(null);
@@ -42,6 +45,8 @@ function App() {
   const equalizerPresetMenuRef = useRef<HTMLDivElement | null>(null);
   const {
     appLanguage,
+    detailPanelOpen,
+    detailPanelTab,
     fontPresetId,
     hideOnTray,
     isLibrarySortMenuOpen,
@@ -49,6 +54,8 @@ function App() {
     librarySortKey,
     personalizationView,
     setAppLanguage,
+    setDetailPanelOpen,
+    setDetailPanelTab,
     setFontPresetId,
     setHideOnTray,
     setIsLibrarySortMenuOpen,
@@ -812,8 +819,43 @@ function App() {
     volume,
   });
 
+  const shellValue: ShellContextValue = {
+    activeDownloadCount: downloadQueue.filter(
+      (item) => item.status === "fetching" || item.status === "pending" || item.status === "downloading",
+    ).length,
+    collectionName,
+    copy,
+    detailPanelOpen,
+    detailPanelTab,
+    isNoticeVisible: isBannerVisible,
+    isScanning,
+    libraryTrackCount: tracks.length,
+    onDismissNotice: () => setIsBannerVisible(false),
+    onEnterMiniMode: handleEnterMiniModeRequest,
+    onOpenAppearance: () => handleOpenPersonalization("theme"),
+    onOpenDownloads: openDownloadModal,
+    onOpenEqualizer: handleOpenEqualizerModal,
+    onOpenSettings: () => {
+      handleOpenPersonalization("settings");
+      handleOpenSettingsTab();
+    },
+    onScanFolder: handleScanFolderRequest,
+    onShowDetailPanel: (tab: DetailPanelTab) => {
+      if (detailPanelOpen && detailPanelTab === tab) {
+        setDetailPanelOpen(false);
+        return;
+      }
+
+      setDetailPanelTab(tab);
+      setDetailPanelOpen(true);
+    },
+    onToggleDetailPanel: () => setDetailPanelOpen(!detailPanelOpen),
+    scannedPath,
+    statusMessage,
+  };
+
   return (
-    <>
+    <ShellProvider value={shellValue}>
       <MiniPlayerOverlay
         {...miniPlayerOverlayProps}
       />
@@ -840,8 +882,10 @@ function App() {
       <PlayerBar
         {...playerBarProps}
       />
+
+      <NoticeToast />
     </main>
-    </>
+    </ShellProvider>
   );
 }
 

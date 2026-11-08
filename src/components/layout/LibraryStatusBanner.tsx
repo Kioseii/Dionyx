@@ -16,32 +16,10 @@ type LibraryStatusBannerProps = {
   statusMessage: string;
 };
 
-export function LibraryStatusBanner({
-  copy,
-  filteredTrackCount,
-  isBannerVisible,
-  normalizedSearch,
-  scanError,
-  scannedPath,
-  sourceTrackCount,
-  statusMessage,
-}: LibraryStatusBannerProps) {
-  return (
-    <>
-      <section className={`scan-banner ${isBannerVisible ? "" : "scan-banner--hidden"}`} aria-live="polite">
-        <div>
-          <p className="eyebrow">{copy.libraryStatus}</p>
-          <strong>{statusMessage}</strong>
-          <p className="muted path-text">
-            {scannedPath ? `${copy.currentFolder}: ${scannedPath}` : copy.demoLibraryHint}
-          </p>
-        </div>
-        <span className="status-pill">
-          {normalizedSearch ? `${filteredTrackCount} ${copy.results}` : `${sourceTrackCount} tracks`}
-        </span>
-      </section>
-
-      {scanError ? <p className="error-banner">{scanError}</p> : null}
-    </>
-  );
+/**
+ * Only the persistent scan error stays inline in the main stage; transient
+ * status messages are shown by <NoticeToast />.
+ */
+export function LibraryStatusBanner({ scanError }: LibraryStatusBannerProps) {
+  return scanError ? <p className="error-banner">{scanError}</p> : null;
 }

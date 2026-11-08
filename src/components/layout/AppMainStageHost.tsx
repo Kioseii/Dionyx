@@ -3,6 +3,7 @@ import { DiscoverPanel } from "../discover/DiscoverPanel";
 import { LibraryPanel } from "../library/LibraryPanel";
 import { DetailPanel } from "../player/DetailPanel";
 import { LibraryStatusBanner } from "./LibraryStatusBanner";
+import { useShell } from "./ShellContext";
 import { TopBar } from "./TopBar";
 
 export type AppMainStageHostProps = {
@@ -22,6 +23,8 @@ export function AppMainStageHost({
   libraryStatusBannerProps,
   topBarProps,
 }: AppMainStageHostProps) {
+  const { detailPanelOpen } = useShell();
+
   return (
     <section className="main-stage">
       <TopBar {...topBarProps} />
@@ -30,9 +33,12 @@ export function AppMainStageHost({
 
       {isDiscoverView ? <DiscoverPanel {...discoverPanelProps} /> : null}
 
-      <section className="content-grid" style={isDiscoverView ? { display: "none" } : undefined}>
+      <section
+        className={`content-grid${detailPanelOpen ? "" : " content-grid--no-detail"}`}
+        style={isDiscoverView ? { display: "none" } : undefined}
+      >
         <LibraryPanel {...libraryPanelProps} />
-        <DetailPanel {...detailPanelProps} />
+        {detailPanelOpen ? <DetailPanel {...detailPanelProps} /> : null}
       </section>
     </section>
   );

@@ -1,5 +1,6 @@
 import type { ChangeEvent, RefObject } from "react";
-import { Download, PanelLeft, Settings2 } from "lucide-react";
+import { Download, Palette, PanelLeft, PanelRight, Settings } from "lucide-react";
+import { useShell } from "./ShellContext";
 
 type TopBarCopy = {
   downloadButton: string;
@@ -24,20 +25,31 @@ type TopBarProps = {
   supportedAudioAccept: string;
 };
 
+/**
+ * Search bar. Downloads, appearance/settings and scanning moved to the
+ * sidebar; the right-hand button shows or hides the side panel.
+ */
 export function TopBar({
   copy,
   directoryInputRef,
   isDiscoverView,
-  isScanning,
   onDirectoryChange,
-  onOpenDownload,
-  onOpenPersonalization,
-  onScanFolder,
   onSearchQueryChange,
   onToggleSidebar,
   searchQuery,
   supportedAudioAccept,
 }: TopBarProps) {
+  const {
+    copy: shellCopy,
+    detailPanelOpen,
+    isScanning,
+    onOpenAppearance,
+    onOpenDownloads,
+    onOpenSettings,
+    onScanFolder,
+    onToggleDetailPanel,
+  } = useShell();
+
   return (
     <header className="topbar" style={isDiscoverView ? { display: "none" } : undefined}>
       <input
@@ -75,40 +87,55 @@ export function TopBar({
             value={searchQuery}
           />
         </label>
-
-        {!isDiscoverView ? (
-          <button
-            aria-label={copy.downloadButton}
-            className="toolbar-button toolbar-icon-button download-trigger-button"
-            onClick={onOpenDownload}
-            title={copy.downloadButton}
-            type="button"
-          >
-            <Download aria-hidden="true" className="ui-icon" size={18} strokeWidth={2.1} />
-          </button>
-        ) : null}
       </div>
 
       <div className="toolbar-actions">
+        {/* The sidebar is hidden on narrow windows: keep its shortcuts reachable. */}
         <button
-          aria-label={copy.personalization}
-          className="toolbar-button toolbar-icon-button"
-          onClick={onOpenPersonalization}
-          title={copy.personalization}
+          aria-label={shellCopy.downloadsNav}
+          className="circle-button topbar-narrow-only"
+          onClick={onOpenDownloads}
+          title={shellCopy.downloadsNav}
           type="button"
         >
-          <Settings2 aria-hidden="true" className="ui-icon" size={18} strokeWidth={2.1} />
+          <Download size={16} />
         </button>
-        {!isDiscoverView ? (
-          <button
-            className="toolbar-button"
-            disabled={isScanning}
-            onClick={onScanFolder}
-            type="button"
-          >
-            {isScanning ? copy.scanning : copy.scanFolders}
-          </button>
-        ) : null}
+        <button
+          aria-label={shellCopy.appearanceNav}
+          className="circle-button topbar-narrow-only"
+          onClick={onOpenAppearance}
+          title={shellCopy.appearanceNav}
+          type="button"
+        >
+          <Palette size={16} />
+        </button>
+        <button
+          aria-label={shellCopy.settingsNav}
+          className="circle-button topbar-narrow-only"
+          onClick={onOpenSettings}
+          title={shellCopy.settingsNav}
+          type="button"
+        >
+          <Settings size={16} />
+        </button>
+        <button
+          className="toolbar-button topbar-narrow-only"
+          disabled={isScanning}
+          onClick={onScanFolder}
+          type="button"
+        >
+          {isScanning ? shellCopy.scanning : shellCopy.scanNow}
+        </button>
+        <button
+          aria-label={detailPanelOpen ? shellCopy.hidePanel : shellCopy.showPanel}
+          aria-pressed={detailPanelOpen}
+          className={`circle-button panel-toggle-btn${detailPanelOpen ? " active" : ""}`}
+          onClick={onToggleDetailPanel}
+          title={detailPanelOpen ? shellCopy.hidePanel : shellCopy.showPanel}
+          type="button"
+        >
+          <PanelRight size={16} />
+        </button>
       </div>
     </header>
   );

@@ -1,12 +1,17 @@
 import { getTrackArtworkSrc } from "../../app/utils";
 import { type CSSProperties, type FormEvent } from "react";
 import {
+  ListMusic,
+  MicVocal,
   Pause,
+  PictureInPicture2,
   Play,
   Shuffle,
   SkipBack,
   SkipForward,
+  SlidersHorizontal,
 } from "lucide-react";
+import { useShell } from "../layout/ShellContext";
 import type { AppLanguage, LibraryTrack, RepeatMode } from "../../app/types";
 import { formatTime } from "../../app/utils";
 
@@ -76,6 +81,9 @@ export function PlayerBar({
   shuffleEnabled,
   volume,
 }: PlayerBarProps) {
+  const shell = useShell();
+  const isLyricsOpen = shell.detailPanelOpen && shell.detailPanelTab === "lyrics";
+  const isQueueOpen = shell.detailPanelOpen && shell.detailPanelTab === "queue";
   const coverProgressPercent =
     activeDuration > 0
       ? (Math.min(displayedPlaybackTime, activeDuration) / activeDuration) * 100
@@ -187,6 +195,46 @@ export function PlayerBar({
       </div>
 
       <div className="player-tools">
+        <div className="player-shortcuts">
+          <button
+            aria-label={shell.copy.panelLyrics}
+            aria-pressed={isLyricsOpen}
+            className={`player-tool-button${isLyricsOpen ? " active" : ""}`}
+            onClick={() => shell.onShowDetailPanel("lyrics")}
+            title={shell.copy.panelLyrics}
+            type="button"
+          >
+            <MicVocal aria-hidden="true" size={17} strokeWidth={2} />
+          </button>
+          <button
+            aria-label={shell.copy.panelQueue}
+            aria-pressed={isQueueOpen}
+            className={`player-tool-button${isQueueOpen ? " active" : ""}`}
+            onClick={() => shell.onShowDetailPanel("queue")}
+            title={shell.copy.panelQueue}
+            type="button"
+          >
+            <ListMusic aria-hidden="true" size={17} strokeWidth={2} />
+          </button>
+          <button
+            aria-label={appLanguage === "es" ? "Ecualizador" : "Equalizer"}
+            className="player-tool-button"
+            onClick={shell.onOpenEqualizer}
+            title={appLanguage === "es" ? "Ecualizador" : "Equalizer"}
+            type="button"
+          >
+            <SlidersHorizontal aria-hidden="true" size={17} strokeWidth={2} />
+          </button>
+          <button
+            aria-label={shell.copy.miniPlayer}
+            className="player-tool-button"
+            onClick={shell.onEnterMiniMode}
+            title={shell.copy.miniPlayer}
+            type="button"
+          >
+            <PictureInPicture2 aria-hidden="true" size={17} strokeWidth={2} />
+          </button>
+        </div>
         <button
           aria-label={appLanguage === "es" ? "Velocidad de reproducción" : "Playback speed"}
           className={`speed-button ${playbackRate !== 1 ? "active" : ""}`}
