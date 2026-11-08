@@ -31,7 +31,8 @@
           "$DESKTOP/**",
           "$DOCUMENT/**",
           "$DOWNLOAD/**",
-          "$AUDIO/**"
+          "$AUDIO/**",
+          "$APPCACHE/artwork/**"
         ]
       }
     }

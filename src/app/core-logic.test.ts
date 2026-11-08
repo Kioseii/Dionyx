@@ -48,19 +48,27 @@ describe("resolveSelectedTrackIndex", () => {
 });
 
 describe("serializePlaylistsForStorage", () => {
-  it("drops artwork and blob sources but keeps the rest", () => {
+  it("drops inline artwork and blob sources but keeps the rest", () => {
     const playlist: SavedPlaylist = {
       id: "p1",
       name: "Night",
       sourceCollectionName: "Music",
       sourcePath: "/m",
       createdAt: 1,
-      tracks: [track("/m/a.mp3", { artworkDataUrl: "data:image/png;base64,AAAA", source: "blob:x" })],
+      tracks: [
+        track("/m/a.mp3", {
+          artworkDataUrl: "data:image/png;base64,AAAA",
+          artworkPath: "/cache/artwork/ab.jpg",
+          source: "blob:x",
+        }),
+      ],
     };
     const [stored] = JSON.parse(serializePlaylistsForStorage([playlist]));
     expect(stored.tracks[0]).not.toHaveProperty("artworkDataUrl");
     expect(stored.tracks[0]).not.toHaveProperty("source");
     expect(stored.tracks[0].path).toBe("/m/a.mp3");
+    // The cached cover path is tiny, so playlists keep their covers on restart.
+    expect(stored.tracks[0].artworkPath).toBe("/cache/artwork/ab.jpg");
     expect(stored.name).toBe("Night");
   });
 });

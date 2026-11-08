@@ -340,17 +340,91 @@ const CREATE_NO_WINDOW: u32 = 0x08000000;
 
 #[tauri::command]
 async fn fetch_url(url: String) -> Result<String, String> {
+    let parsed = validate_fetch_url(&url)?;
+
     reqwest::Client::builder()
         .user_agent("DIONYX lyrics module")
+        .connect_timeout(Duration::from_secs(10))
+        .timeout(Duration::from_secs(20))
         .build()
         .map_err(|e| e.to_string())?
-        .get(&url)
+        .get(parsed)
         .send()
         .await
+        .and_then(|response| response.error_for_status())
         .map_err(|e| e.to_string())?
         .text()
         .await
         .map_err(|e| e.to_string())
+}
+
+/// Hosts the frontend is allowed to reach through `fetch_url` (which exists
+/// to bypass CORS). Anything else is refused so the command cannot be used as
+/// a general-purpose proxy.
+const FETCH_URL_ALLOWED_HOSTS: &[&str] = &["ws.audioscrobbler.com", "lrclib.net"];
+
+fn validate_fetch_url(url: &str) -> Result<reqwest::Url, String> {
+    let parsed = reqwest::Url::parse(url).map_err(|_| "URL no valida.".to_string())?;
+
+    if parsed.scheme() != "https" {
+        return Err("Solo se permiten URLs https.".into());
+    }
+
+    match parsed.host_str() {
+        Some(host) if FETCH_URL_ALLOWED_HOSTS.contains(&host) => Ok(parsed),
+        _ => Err("Host no permitido.".into()),
+    }
+}
+
+// ── Library roots (write/delete guard) ────────────────────────────────────
+
+/// Canonical folders scanned during this session. Commands that modify or
+/// delete files only act inside them.
+struct LibraryRoots(Mutex<Vec<PathBuf>>);
+
+fn remember_library_root(state: &LibraryRoots, root: &Path) {
+    if let Ok(canonical) = root.canonicalize() {
+        let mut roots = state.0.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        if !roots.contains(&canonical) {
+            roots.push(canonical);
+        }
+    }
+}
+
+fn is_inside_roots(roots: &[PathBuf], canonical: &Path) -> bool {
+    roots.iter().any(|root| canonical.starts_with(root))
+}
+
+/// Resolves `path` and checks that it is a supported audio file inside a
+/// scanned library folder.
+fn ensure_library_audio_file(state: &LibraryRoots, path: &str) -> Result<PathBuf, String> {
+    let canonical = PathBuf::from(path)
+        .canonicalize()
+        .map_err(|_| "El archivo no existe en el disco.".to_string())?;
+
+    if !canonical.is_file() || !is_supported_audio_file(&canonical) {
+        return Err("Solo se pueden modificar archivos de audio de la biblioteca.".into());
+    }
+
+    let roots = state.0.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    if !is_inside_roots(&roots, &canonical) {
+        return Err("El archivo esta fuera de la biblioteca escaneada.".into());
+    }
+
+    Ok(canonical)
+}
+
+fn ensure_library_folder(state: &LibraryRoots, path: &str) -> Result<PathBuf, String> {
+    let canonical = PathBuf::from(path)
+        .canonicalize()
+        .map_err(|_| "La carpeta de destino no existe.".to_string())?;
+
+    let roots = state.0.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    if !canonical.is_dir() || !is_inside_roots(&roots, &canonical) {
+        return Err("La carpeta de destino no es una biblioteca escaneada.".into());
+    }
+
+    Ok(canonical)
 }
 
 // ── Tray state ────────────────────────────────────────────────────────────
@@ -390,6 +464,9 @@ struct LibraryTrack {
     quality: String,
     duration: String,
     path: String,
+    /// Cached cover on disk (served through the asset protocol).
+    artwork_path: Option<String>,
+    /// Only used when the cover could not be written to the cache.
     artwork_data_url: Option<String>,
 }
 
@@ -403,8 +480,28 @@ struct LibraryScan {
 }
 
 #[tauri::command]
-async fn scan_music_folder(folder_path: String) -> Result<LibraryScan, String> {
-    let root = PathBuf::from(&folder_path);
+async fn scan_music_folder(
+    app: tauri::AppHandle,
+    folder_path: String,
+) -> Result<LibraryScan, String> {
+    let artwork_dir = app
+        .path()
+        .app_cache_dir()
+        .ok()
+        .map(|dir| dir.join("artwork"))
+        .filter(|dir| fs::create_dir_all(dir).is_ok());
+
+    let scan = run_blocking(move || scan_music_folder_blocking(&folder_path, artwork_dir.as_deref()))
+        .await?;
+    remember_library_root(&app.state::<LibraryRoots>(), Path::new(&scan.scanned_path));
+    Ok(scan)
+}
+
+fn scan_music_folder_blocking(
+    folder_path: &str,
+    artwork_dir: Option<&Path>,
+) -> Result<LibraryScan, String> {
+    let root = PathBuf::from(folder_path);
 
     if !root.exists() {
         return Err("La carpeta seleccionada no existe.".into());
@@ -422,8 +519,10 @@ async fn scan_music_folder(folder_path: String) -> Result<LibraryScan, String> {
         .to_string();
 
     let mut audio_files = Vec::new();
-    collect_audio_files(&root, &mut audio_files)
-        .map_err(|error| format!("No pude leer la carpeta: {error}"))?;
+    // Only the root folder itself must be readable; unreadable subfolders are
+    // skipped instead of failing the whole scan.
+    fs::read_dir(&root).map_err(|error| format!("No pude leer la carpeta: {error}"))?;
+    collect_audio_files(&root, &mut audio_files);
 
     audio_files.sort_by(|left, right| {
         left.file_name()
@@ -433,7 +532,7 @@ async fn scan_music_folder(folder_path: String) -> Result<LibraryScan, String> {
 
     let tracks = audio_files
         .iter()
-        .map(|path| track_from_path(path, &collection_name))
+        .map(|path| track_from_path(path, artwork_dir))
         .collect::<Vec<_>>();
 
     Ok(LibraryScan {
@@ -444,19 +543,25 @@ async fn scan_music_folder(folder_path: String) -> Result<LibraryScan, String> {
     })
 }
 
-fn collect_audio_files(directory: &Path, output: &mut Vec<PathBuf>) -> std::io::Result<()> {
-    for entry in fs::read_dir(directory)? {
-        let entry = entry?;
+/// Recursively collects supported audio files. Symlinked/junction folders are
+/// not followed (avoids cycles) and unreadable entries are skipped.
+fn collect_audio_files(directory: &Path, output: &mut Vec<PathBuf>) {
+    let Ok(entries) = fs::read_dir(directory) else {
+        return;
+    };
+
+    for entry in entries.flatten() {
+        let Ok(file_type) = entry.file_type() else {
+            continue;
+        };
         let path = entry.path();
 
-        if path.is_dir() {
-            collect_audio_files(&path, output)?;
-        } else if is_supported_audio_file(&path) {
+        if file_type.is_dir() {
+            collect_audio_files(&path, output);
+        } else if (file_type.is_file() || file_type.is_symlink()) && is_supported_audio_file(&path) {
             output.push(path);
         }
     }
-
-    Ok(())
 }
 
 fn is_supported_audio_file(path: &Path) -> bool {
@@ -471,7 +576,7 @@ fn is_supported_audio_file(path: &Path) -> bool {
         .unwrap_or(false)
 }
 
-fn track_from_path(path: &Path, _collection_name: &str) -> LibraryTrack {
+fn track_from_path(path: &Path, artwork_dir: Option<&Path>) -> LibraryTrack {
     let file_stem = path
         .file_stem()
         .and_then(|stem| stem.to_str())
@@ -502,6 +607,7 @@ fn track_from_path(path: &Path, _collection_name: &str) -> LibraryTrack {
         quality,
         duration: "--:--".into(),
         path: path.display().to_string(),
+        artwork_path: None,
         artwork_data_url: None,
     };
 
@@ -526,7 +632,12 @@ fn track_from_path(path: &Path, _collection_name: &str) -> LibraryTrack {
                 track.album = track.artist.clone();
             }
 
-            track.artwork_data_url = extract_artwork_data_url(tag);
+            if let Some(picture) = tag.pictures().first() {
+                match artwork_dir.and_then(|dir| cache_artwork(dir, picture)) {
+                    Some(cached) => track.artwork_path = Some(cached),
+                    None => track.artwork_data_url = artwork_data_url(picture),
+                }
+            }
         }
 
         track.duration = format_duration(tagged_file.properties().duration());
@@ -550,9 +661,58 @@ fn clean_metadata_value(value: Option<&str>) -> Option<String> {
         .map(ToString::to_string)
 }
 
-fn extract_artwork_data_url(tag: &lofty::tag::Tag) -> Option<String> {
-    let picture = tag.pictures().first()?;
-    let mime_type = picture.mime_type()?.as_str();
+/// Image type of an embedded cover: declared MIME first, then magic bytes.
+fn artwork_kind(picture: &lofty::picture::Picture) -> Option<(&'static str, &'static str)> {
+    use lofty::picture::MimeType;
+
+    match picture.mime_type() {
+        Some(MimeType::Png) => return Some(("png", "image/png")),
+        Some(MimeType::Jpeg) => return Some(("jpg", "image/jpeg")),
+        Some(MimeType::Gif) => return Some(("gif", "image/gif")),
+        Some(MimeType::Bmp) => return Some(("bmp", "image/bmp")),
+        _ => {}
+    }
+
+    let data = picture.data();
+    if data.starts_with(&[0x89, b'P', b'N', b'G']) {
+        Some(("png", "image/png"))
+    } else if data.starts_with(&[0xFF, 0xD8, 0xFF]) {
+        Some(("jpg", "image/jpeg"))
+    } else {
+        None
+    }
+}
+
+/// Writes the cover to `<cache>/artwork/<sha256>.<ext>` (once per distinct
+/// image, so a whole album shares one file) and returns its path.
+fn cache_artwork(dir: &Path, picture: &lofty::picture::Picture) -> Option<String> {
+    use sha2::{Digest, Sha256};
+
+    let (extension, _) = artwork_kind(picture)?;
+    let data = picture.data();
+    if data.is_empty() {
+        return None;
+    }
+
+    let digest = format!("{:x}", Sha256::digest(data));
+    let file = dir.join(format!("{}.{extension}", &digest[..32]));
+
+    if !file.exists() {
+        let partial = dir.join(format!("{}.{extension}.part", &digest[..32]));
+        fs::write(&partial, data).ok()?;
+        if fs::rename(&partial, &file).is_err() {
+            let _ = fs::remove_file(&partial);
+            if !file.exists() {
+                return None;
+            }
+        }
+    }
+
+    Some(file.display().to_string())
+}
+
+fn artwork_data_url(picture: &lofty::picture::Picture) -> Option<String> {
+    let (_, mime_type) = artwork_kind(picture)?;
     let encoded = {
         use base64::{engine::general_purpose::STANDARD, Engine as _};
 
@@ -581,6 +741,7 @@ fn format_duration(duration: Duration) -> String {
 /// `artwork_b64` is a base64-encoded JPEG or PNG; `artwork_mime` is its MIME type.
 #[tauri::command]
 async fn save_track_metadata(
+    roots: tauri::State<'_, LibraryRoots>,
     path: String,
     title: String,
     artist: String,
@@ -588,6 +749,9 @@ async fn save_track_metadata(
     artwork_b64: Option<String>,
     artwork_mime: Option<String>,
 ) -> Result<(), String> {
+    let path = ensure_library_audio_file(&roots, &path)?
+        .display()
+        .to_string();
     run_blocking(move || {
         save_track_metadata_blocking(path, title, artist, album, artwork_b64, artwork_mime)
     })
@@ -684,14 +848,13 @@ struct DownloadFailed {
 
 /// Permanently deletes an audio file from disk.
 #[tauri::command]
-async fn delete_track_file(path: String) -> Result<(), String> {
+async fn delete_track_file(
+    roots: tauri::State<'_, LibraryRoots>,
+    path: String,
+) -> Result<(), String> {
+    // Only audio files inside a folder scanned this session can be deleted.
+    let file_path = ensure_library_audio_file(&roots, &path)?;
     run_blocking(move || {
-        let file_path = std::path::PathBuf::from(&path);
-
-        if !file_path.exists() {
-            return Err("El archivo no existe en el disco.".into());
-        }
-
         std::fs::remove_file(&file_path)
             .map_err(|e| format!("No se pudo eliminar el archivo: {e}"))
     })
@@ -877,6 +1040,8 @@ struct ToolingSupport {
 }
 
 #[tauri::command]
+// Each platform block returns early; which one is "last" depends on the target.
+#[allow(clippy::needless_return)]
 fn get_tooling_support() -> ToolingSupport {
     #[cfg(target_os = "windows")]
     {
@@ -970,8 +1135,8 @@ async fn install_ytdlp(app: tauri::AppHandle) -> Result<(), String> {
             file.write_all(&chunk).map_err(|e| e.to_string())?;
             hasher.update(&chunk);
             downloaded += chunk.len() as u64;
-            if total > 0 {
-                let pct = ((downloaded * 100) / total).min(100) as u8;
+            if let Some(pct) = (downloaded * 100).checked_div(total) {
+                let pct = pct.min(100) as u8;
                 if pct != last_pct {
                     last_pct = pct;
                     let _ = app.emit(
@@ -1354,11 +1519,19 @@ fn get_video_info_blocking(url: &str, exe: &Path) -> Result<String, String> {
 #[tauri::command]
 fn download_audio(
     app: tauri::AppHandle,
+    roots: tauri::State<'_, LibraryRoots>,
     download_id: String,
     url: String,
     format: String,
     output_dir: String,
 ) -> Result<(), String> {
+    if !matches!(format.as_str(), "mp3" | "flac" | "m4a" | "opus" | "ogg" | "wav") {
+        return Err("Formato de audio no soportado.".into());
+    }
+    let output_dir = ensure_library_folder(&roots, &output_dir)?
+        .display()
+        .to_string();
+
     // Resolve text queries → YouTube Music URL for better metadata/artwork
     let exe = ytdlp_exe(&app);
     std::thread::spawn(move || {
@@ -1449,7 +1622,7 @@ fn download_audio(
                         // the extracted audio (--extract-audio). The last one is
                         // the file that actually exists after yt-dlp finishes.
                         if line.contains("Destination:") {
-                            if let Some(path_str) = line.splitn(2, "Destination:").nth(1) {
+                            if let Some((_, path_str)) = line.split_once("Destination:") {
                                 native_path = Some(PathBuf::from(path_str.trim()));
                             }
                         }
@@ -1490,14 +1663,13 @@ fn download_audio(
                         let message = stderr_content
                             .lines()
                             .filter(|l| !l.trim().is_empty())
-                            .filter(|l| {
+                            .rfind(|l| {
                                 let low = l.to_lowercase();
                                 low.contains("error")
                                     || low.contains("warning")
                                     || low.contains("unable")
                             })
-                            .last()
-                            .or_else(|| stderr_content.lines().last())
+                            .or_else(|| stderr_content.lines().next_back())
                             .map(|l| l.trim().trim_start_matches("ERROR: ").to_string())
                             .unwrap_or_else(|| "yt-dlp terminó con un error desconocido.".into());
 
@@ -1869,6 +2041,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .manage(HideOnTrayState(AtomicBool::new(false)))
+        .manage(LibraryRoots(Mutex::new(Vec::new())))
         .manage(create_discord_state())
         .invoke_handler(tauri::generate_handler![
             scan_music_folder,
@@ -1972,6 +2145,44 @@ mod tests {
         assert_eq!(expected_sha256(&sums, "yt-dlp.exe"), Some(hash));
         assert_eq!(expected_sha256(&sums, "yt-dlp_macos"), Some("c".repeat(64)));
         assert_eq!(expected_sha256(&sums, "yt-dlp_linux"), None);
+    }
+
+    #[test]
+    fn fetch_url_only_allows_known_https_hosts() {
+        assert!(validate_fetch_url("https://lrclib.net/api/get?track_name=x").is_ok());
+        assert!(validate_fetch_url("https://ws.audioscrobbler.com/2.0/?method=x").is_ok());
+        assert!(validate_fetch_url("http://lrclib.net/api/get").is_err());
+        assert!(validate_fetch_url("https://evil.example/").is_err());
+        assert!(validate_fetch_url("https://lrclib.net.evil.example/").is_err());
+        assert!(validate_fetch_url("file:///C:/Windows/win.ini").is_err());
+    }
+
+    #[test]
+    fn library_guard_only_accepts_audio_inside_scanned_roots() {
+        let base = std::env::temp_dir().join(format!("dionyx-roots-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        let library = base.join("library");
+        let outside = base.join("outside");
+        std::fs::create_dir_all(&library).unwrap();
+        std::fs::create_dir_all(&outside).unwrap();
+        std::fs::write(library.join("song.mp3"), b"x").unwrap();
+        std::fs::write(library.join("notes.txt"), b"x").unwrap();
+        std::fs::write(outside.join("other.mp3"), b"x").unwrap();
+
+        let state = LibraryRoots(Mutex::new(Vec::new()));
+        let inside = library.join("song.mp3").display().to_string();
+        assert!(ensure_library_audio_file(&state, &inside).is_err(), "nothing scanned yet");
+
+        remember_library_root(&state, &library);
+        assert!(ensure_library_audio_file(&state, &inside).is_ok());
+        assert!(ensure_library_audio_file(&state, &library.join("notes.txt").display().to_string()).is_err());
+        assert!(ensure_library_audio_file(&state, &outside.join("other.mp3").display().to_string()).is_err());
+        let traversal = library.join("..").join("outside").join("other.mp3");
+        assert!(ensure_library_audio_file(&state, &traversal.display().to_string()).is_err());
+        assert!(ensure_library_folder(&state, &library.display().to_string()).is_ok());
+        assert!(ensure_library_folder(&state, &outside.display().to_string()).is_err());
+
+        let _ = std::fs::remove_dir_all(&base);
     }
 
     #[test]

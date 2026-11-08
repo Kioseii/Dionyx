@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { type ChangeEvent, useEffect, useRef, useState } from "react";
 import type { LibraryTrack, SavedPlaylist } from "../app/types";
-import { getTrackKey } from "../app/utils";
+import { getTrackArtworkSrc, getTrackKey } from "../app/utils";
 
 type TrackManagementCopy = {
   editMetaArtworkSizeError: string;
@@ -115,7 +115,7 @@ export function useTrackManagement({
     setEditMetaTitle(track.title);
     setEditMetaArtist(track.artist);
     setEditMetaAlbum(track.album);
-    setEditMetaArtworkPreview(track.artworkDataUrl ?? null);
+    setEditMetaArtworkPreview(getTrackArtworkSrc(track));
     setEditMetaArtworkB64(null);
     setEditMetaArtworkMime(null);
     setEditMetaArtworkError(null);
@@ -178,7 +178,12 @@ export function useTrackManagement({
         title: editMetaTitle.trim() || editMetaTrack.title,
         artist: editMetaArtist.trim() || editMetaTrack.artist,
         album: editMetaAlbum.trim() || editMetaTrack.album,
-        artworkDataUrl: editMetaArtworkPreview ?? editMetaTrack.artworkDataUrl,
+        // Only a newly picked image replaces the cover; otherwise keep the
+        // cached file (artworkPath) or inline image the track already had.
+        artworkDataUrl:
+          editMetaArtworkB64 && editMetaArtworkPreview
+            ? editMetaArtworkPreview
+            : editMetaTrack.artworkDataUrl,
       };
 
       const trackKey = getTrackKey(editMetaTrack);

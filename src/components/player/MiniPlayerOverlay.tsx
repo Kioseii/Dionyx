@@ -1,3 +1,4 @@
+import { getTrackArtworkSrc } from "../../app/utils";
 import { type CSSProperties, type FormEvent, type RefObject } from "react";
 import { Pause, Pin, Play, SkipBack, SkipForward, X } from "lucide-react";
 import type { LibraryTrack } from "../../app/types";
@@ -58,8 +59,8 @@ export function MiniPlayerOverlay({
     >
       <div className="mp-main-row">
         <div className="mp-artwork">
-          {selectedTrack.artworkDataUrl ? (
-            <img alt="artwork" src={selectedTrack.artworkDataUrl} />
+          {getTrackArtworkSrc(selectedTrack) ? (
+            <img alt="artwork" src={getTrackArtworkSrc(selectedTrack) ?? undefined} />
           ) : (
             <div className="mp-artwork-fallback" />
           )}

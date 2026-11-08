@@ -1,3 +1,4 @@
+import { getTrackArtworkSrc } from "../../app/utils";
 import { type CSSProperties, type FormEvent } from "react";
 import {
   Pause,
@@ -92,11 +93,11 @@ export function PlayerBar({
           style={{ "--cover-progress": `${coverProgressPercent}%` } as CSSProperties}
         >
           <div className="player-cover">
-            {selectedTrack.artworkDataUrl ? (
+            {getTrackArtworkSrc(selectedTrack) ? (
               <img
                 alt={`Portada de ${selectedTrack.album}`}
                 className="player-cover-image"
-                src={selectedTrack.artworkDataUrl}
+                src={getTrackArtworkSrc(selectedTrack) ?? undefined}
               />
             ) : null}
           </div>

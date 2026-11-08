@@ -356,12 +356,6 @@ export function usePlaylists({
     setDragOverPlaylistTrackIndex(index);
   }
 
-  function handlePlaylistTrackDrop(targetIndex: number) {
-    if (!activePlaylist || draggedPlaylistTrackIndex === null || targetIndex < 0) {
-      return;
-    }
-  }
-
   return {
     activatePlaylist,
     activePlaylist,
@@ -377,7 +371,6 @@ export function usePlaylists({
     editingPlaylist,
     filteredPlaylistCandidateTracks,
     handlePlaylistTrackDragStart,
-    handlePlaylistTrackDrop,
     isPlaylistModalOpen,
     isRenamePlaylistModalOpen,
     isTrackPlaylistModalOpen,

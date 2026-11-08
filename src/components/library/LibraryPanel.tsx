@@ -1,4 +1,5 @@
-import { type RefObject } from "react";
+import { getTrackArtworkSrc } from "../../app/utils";
+import { memo, useRef, type MutableRefObject, type RefObject } from "react";
 import { Check, ChevronDown } from "lucide-react";
 import type { AppLanguage, LibrarySortKey, LibraryTrack, SavedPlaylist } from "../../app/types";
 
@@ -91,6 +92,31 @@ export function LibraryPanel({
   sourceTracks,
   trackMenuRef,
 }: LibraryPanelProps) {
+  // Rows are memoized and only re-render when their own data changes (not on
+  // every playback-time tick); they reach the latest callbacks through a ref.
+  const rowHandlersRef = useRef<LibraryRowHandlers>({
+    onDeleteTrack,
+    onEditTrack,
+    onPlaylistTrackDragStart,
+    onPlaylistTrackDrop,
+    onSelectTrack,
+    onSetDragOverPlaylistTrackIndex,
+    onSetOpenTrackMenuIndex,
+    onStartMarquee,
+    onStopMarquee,
+  });
+  rowHandlersRef.current = {
+    onDeleteTrack,
+    onEditTrack,
+    onPlaylistTrackDragStart,
+    onPlaylistTrackDrop,
+    onSelectTrack,
+    onSetDragOverPlaylistTrackIndex,
+    onSetOpenTrackMenuIndex,
+    onStartMarquee,
+    onStopMarquee,
+  };
+
   return (
     <article className="track-panel">
       <div className="section-heading">
@@ -176,123 +202,23 @@ export function LibraryPanel({
 
         {displayTrackRows.length > 0 ? (
           displayTrackRows.map(({ track, index }, displayIndex) => (
-            <div
-              aria-label={`${track.title} por ${track.artist}`}
-              className={`table-row ${index === selectedTrackInViewIndex ? "active" : ""} ${draggedPlaylistTrackIndex === index ? "dragging" : ""} ${dragOverPlaylistTrackIndex === index ? "drop-target" : ""} ${activePlaylist ? "reorderable" : ""}`}
-              onMouseEnter={(e) => {
-                e.currentTarget.querySelectorAll<HTMLElement>(".marquee-clip").forEach(onStartMarquee);
-                if (!activePlaylist || draggedPlaylistTrackIndex === null) return;
-                onSetDragOverPlaylistTrackIndex(index);
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.querySelectorAll<HTMLElement>(".marquee-clip").forEach(onStopMarquee);
-              }}
-              onMouseUp={() => {
-                if (!activePlaylist || draggedPlaylistTrackIndex === null) {
-                  return;
-                }
-                onPlaylistTrackDrop(index);
-              }}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" || event.key === " ") {
-                  event.preventDefault();
-                  onSelectTrack(index, true);
-                }
-              }}
+            <LibraryTrackRow
+              deleteLabel={copy.trackMenuDelete}
+              displayNumber={activePlaylist ? index + 1 : displayIndex + 1}
+              editLabel={copy.trackMenuEditMeta}
+              handlersRef={rowHandlersRef}
+              ignoreNextRowClickRef={ignoreNextRowClickRef}
+              index={index}
+              isActive={index === selectedTrackInViewIndex}
+              isDragActive={draggedPlaylistTrackIndex !== null}
+              isDragging={draggedPlaylistTrackIndex === index}
+              isDropTarget={dragOverPlaylistTrackIndex === index}
+              isMenuOpen={openTrackMenuIndex === index}
+              isReorderable={Boolean(activePlaylist)}
               key={track.path || `${track.title}-${index}`}
-              onClick={() => {
-                if (ignoreNextRowClickRef.current) {
-                  ignoreNextRowClickRef.current = false;
-                  return;
-                }
-
-                onSelectTrack(index, true);
-              }}
-              role="button"
-              tabIndex={0}
-            >
-              <span className="row-index drag-index">
-                {activePlaylist ? (
-                  <span
-                    aria-label={`Mover ${track.title}`}
-                    className="drag-handle"
-                    onMouseDown={(event) => {
-                      event.preventDefault();
-                      event.stopPropagation();
-                      onPlaylistTrackDragStart(index);
-                    }}
-                    role="button"
-                    tabIndex={-1}
-                  >
-                    ⋮⋮
-                  </span>
-                ) : null}
-                {activePlaylist ? index + 1 : displayIndex + 1}
-              </span>
-              <div className="track-cell">
-                <div className="track-artwork">
-                  {track.artworkDataUrl ? (
-                    <img
-                      alt={`Portada de ${track.album || track.title}`}
-                      className="track-artwork-image"
-                      src={track.artworkDataUrl}
-                    />
-                  ) : (
-                    <div className="track-artwork-fallback" />
-                  )}
-                </div>
-                <div className="track-copy">
-                  <strong className="marquee-clip"><span className="marquee-text">{track.title}</span></strong>
-                  <p className="marquee-clip"><span className="marquee-text">{track.artist}</span></p>
-                </div>
-              </div>
-              <span className="album-cell marquee-clip"><span className="marquee-text">{track.album}</span></span>
-              <span className="format-pill">{track.format}</span>
-              <span className="time-cell duration-cell">{track.duration}</span>
-              <div
-                className="track-options-wrap"
-                ref={openTrackMenuIndex === index ? trackMenuRef : null}
-              >
-                <button
-                  aria-label={`Opciones de ${track.title}`}
-                  className="track-options-button"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    ignoreNextRowClickRef.current = true;
-                    onSetOpenTrackMenuIndex((current) => (current === index ? null : index));
-                  }}
-                  type="button"
-                >
-                  <span />
-                  <span />
-                  <span />
-                </button>
-                {openTrackMenuIndex === index ? (
-                  <div className="track-options-menu">
-                    <button
-                      className="track-menu-item"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        onEditTrack(track);
-                      }}
-                      type="button"
-                    >
-                      {copy.trackMenuEditMeta}
-                    </button>
-                    <button
-                      className="track-menu-item danger"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        onDeleteTrack(track);
-                      }}
-                      type="button"
-                    >
-                      {copy.trackMenuDelete}
-                    </button>
-                  </div>
-                ) : null}
-              </div>
-            </div>
+              track={track}
+              trackMenuRef={trackMenuRef}
+            />
           ))
         ) : sourceTracks.length > 0 ? (
           <div className="table-empty">
@@ -309,3 +235,173 @@ export function LibraryPanel({
     </article>
   );
 }
+
+type LibraryRowHandlers = Pick<
+  LibraryPanelProps,
+  | "onDeleteTrack"
+  | "onEditTrack"
+  | "onPlaylistTrackDragStart"
+  | "onPlaylistTrackDrop"
+  | "onSelectTrack"
+  | "onSetDragOverPlaylistTrackIndex"
+  | "onSetOpenTrackMenuIndex"
+  | "onStartMarquee"
+  | "onStopMarquee"
+>;
+
+type LibraryTrackRowProps = {
+  deleteLabel: string;
+  displayNumber: number;
+  editLabel: string;
+  handlersRef: MutableRefObject<LibraryRowHandlers>;
+  ignoreNextRowClickRef: { current: boolean };
+  index: number;
+  isActive: boolean;
+  isDragActive: boolean;
+  isDragging: boolean;
+  isDropTarget: boolean;
+  isMenuOpen: boolean;
+  isReorderable: boolean;
+  track: LibraryTrack;
+  trackMenuRef: RefObject<HTMLDivElement | null>;
+};
+
+const LibraryTrackRow = memo(function LibraryTrackRow({
+  deleteLabel,
+  displayNumber,
+  editLabel,
+  handlersRef,
+  ignoreNextRowClickRef,
+  index,
+  isActive,
+  isDragActive,
+  isDragging,
+  isDropTarget,
+  isMenuOpen,
+  isReorderable,
+  track,
+  trackMenuRef,
+}: LibraryTrackRowProps) {
+  const artworkSrc = getTrackArtworkSrc(track);
+
+  return (
+    <div
+      aria-label={`${track.title} por ${track.artist}`}
+      className={`table-row ${isActive ? "active" : ""} ${isDragging ? "dragging" : ""} ${isDropTarget ? "drop-target" : ""} ${isReorderable ? "reorderable" : ""}`}
+      onMouseEnter={(e) => {
+        e.currentTarget.querySelectorAll<HTMLElement>(".marquee-clip").forEach(handlersRef.current.onStartMarquee);
+        if (!isReorderable || !isDragActive) return;
+        handlersRef.current.onSetDragOverPlaylistTrackIndex(index);
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.querySelectorAll<HTMLElement>(".marquee-clip").forEach(handlersRef.current.onStopMarquee);
+      }}
+      onMouseUp={() => {
+        if (!isReorderable || !isDragActive) {
+          return;
+        }
+        handlersRef.current.onPlaylistTrackDrop(index);
+      }}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          handlersRef.current.onSelectTrack(index, true);
+        }
+      }}
+      onClick={() => {
+        if (ignoreNextRowClickRef.current) {
+          ignoreNextRowClickRef.current = false;
+          return;
+        }
+
+        handlersRef.current.onSelectTrack(index, true);
+      }}
+      role="button"
+      tabIndex={0}
+    >
+      <span className="row-index drag-index">
+        {isReorderable ? (
+          <span
+            aria-label={`Mover ${track.title}`}
+            className="drag-handle"
+            onMouseDown={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              handlersRef.current.onPlaylistTrackDragStart(index);
+            }}
+            role="button"
+            tabIndex={-1}
+          >
+            ⋮⋮
+          </span>
+        ) : null}
+        {displayNumber}
+      </span>
+      <div className="track-cell">
+        <div className="track-artwork">
+          {artworkSrc ? (
+            <img
+              alt={`Portada de ${track.album || track.title}`}
+              className="track-artwork-image"
+              decoding="async"
+              loading="lazy"
+              src={artworkSrc}
+            />
+          ) : (
+            <div className="track-artwork-fallback" />
+          )}
+        </div>
+        <div className="track-copy">
+          <strong className="marquee-clip"><span className="marquee-text">{track.title}</span></strong>
+          <p className="marquee-clip"><span className="marquee-text">{track.artist}</span></p>
+        </div>
+      </div>
+      <span className="album-cell marquee-clip"><span className="marquee-text">{track.album}</span></span>
+      <span className="format-pill">{track.format}</span>
+      <span className="time-cell duration-cell">{track.duration}</span>
+      <div
+        className="track-options-wrap"
+        ref={isMenuOpen ? trackMenuRef : null}
+      >
+        <button
+          aria-label={`Opciones de ${track.title}`}
+          className="track-options-button"
+          onClick={(event) => {
+            event.stopPropagation();
+            ignoreNextRowClickRef.current = true;
+            handlersRef.current.onSetOpenTrackMenuIndex((current) => (current === index ? null : index));
+          }}
+          type="button"
+        >
+          <span />
+          <span />
+          <span />
+        </button>
+        {isMenuOpen ? (
+          <div className="track-options-menu">
+            <button
+              className="track-menu-item"
+              onClick={(event) => {
+                event.stopPropagation();
+                handlersRef.current.onEditTrack(track);
+              }}
+              type="button"
+            >
+              {editLabel}
+            </button>
+            <button
+              className="track-menu-item danger"
+              onClick={(event) => {
+                event.stopPropagation();
+                handlersRef.current.onDeleteTrack(track);
+              }}
+              type="button"
+            >
+              {deleteLabel}
+            </button>
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+});

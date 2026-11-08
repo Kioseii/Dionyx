@@ -1,4 +1,5 @@
 import type { CSSProperties } from "react";
+import { convertFileSrc } from "@tauri-apps/api/core";
 import {
   brandName,
   defaultEqualizerValues,
@@ -193,8 +194,22 @@ export function sanitizeTrack(track: LibraryTrack): LibraryTrack {
         .toUpperCase() || "--",
     quality: sanitizePlainTextInput(track.quality, 48).trim() || "Local",
     duration: /^[0-9]{1,3}:[0-9]{2}$/.test(track.duration) ? track.duration : "--:--",
+    artworkPath: typeof track.artworkPath === "string" && track.artworkPath ? track.artworkPath : undefined,
     artworkDataUrl: safeArtworkDataUrl,
   };
+}
+
+/** Image URL for a track's cover, or null when it has none. */
+export function getTrackArtworkSrc(track: LibraryTrack): string | null {
+  if (track.artworkDataUrl) {
+    return track.artworkDataUrl;
+  }
+
+  if (track.artworkPath && isTauriRuntime()) {
+    return convertFileSrc(track.artworkPath);
+  }
+
+  return null;
 }
 
 export function getTrackKey(track: LibraryTrack) {

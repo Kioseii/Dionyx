@@ -1,3 +1,4 @@
+import { getTrackArtworkSrc } from "../../app/utils";
 import { type CSSProperties, type FormEvent, useEffect, useRef, useState } from "react";
 import { FileText, ListMusic, Minimize2, SlidersHorizontal } from "lucide-react";
 import type { LibraryTrack, SavedPlaylist } from "../../app/types";
@@ -184,11 +185,11 @@ export function DetailPanel({
         ) : (
           <>
             <div className="artwork-frame">
-              {selectedTrack.artworkDataUrl ? (
+              {getTrackArtworkSrc(selectedTrack) ? (
                 <img
                   alt={`Portada de ${selectedTrack.album}`}
                   className="artwork-image"
-                  src={selectedTrack.artworkDataUrl}
+                  src={getTrackArtworkSrc(selectedTrack) ?? undefined}
                 />
               ) : (
                 <div className="artwork-core" />
@@ -314,11 +315,13 @@ export function DetailPanel({
                   <span className="queue-item-index">{position + 1}</span>
                 )}
                 <div className="queue-item-artwork">
-                  {track.artworkDataUrl ? (
+                  {getTrackArtworkSrc(track) ? (
                     <img
                       alt={`Portada de ${track.album || track.title}`}
                       className="queue-item-artwork-image"
-                      src={track.artworkDataUrl}
+                      decoding="async"
+                      loading="lazy"
+                      src={getTrackArtworkSrc(track) ?? undefined}
                     />
                   ) : (
                     <div className="queue-item-artwork-fallback" />
