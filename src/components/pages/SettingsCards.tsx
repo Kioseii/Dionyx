@@ -1,3 +1,5 @@
+import { MAX_CROSSFADE_SECONDS } from "../../app/transitions";
+import type { CSSProperties } from "react";
 import { useEffect, useState } from "react";
 import { FolderOpen, PictureInPicture2, SlidersHorizontal } from "lucide-react";
 import { countLabel } from "../../app/library-groups";
@@ -28,7 +30,8 @@ export function LibrarySettingsCard() {
 
 /** Settings card: shortcuts to the playback tools. */
 export function PlaybackSettingsCard() {
-  const { copy, onEnterMiniMode, onOpenEqualizer } = useShell();
+  const { copy, onEnterMiniMode, onOpenEqualizer, playbackTransitions } = useShell();
+  const { crossfadeSeconds, gapless, onCrossfadeSecondsChange, onGaplessChange } = playbackTransitions;
 
   return (
     <div className="settings-card">
@@ -44,6 +47,46 @@ export function PlaybackSettingsCard() {
           <PictureInPicture2 aria-hidden="true" size={16} strokeWidth={2} />
           {copy.miniPlayer}
         </button>
+      </div>
+
+      <div className="transition-settings">
+        <div className="transition-row">
+          <div>
+            <strong id="gapless-label">{copy.gaplessLabel}</strong>
+            <p className="muted settings-copy">{copy.gaplessHint}</p>
+          </div>
+          <button
+            aria-checked={gapless}
+            aria-labelledby="gapless-label"
+            className={`settings-toggle ${gapless ? "active" : ""}`}
+            onClick={() => onGaplessChange(!gapless)}
+            role="switch"
+            type="button"
+          >
+            <span className="settings-toggle-thumb" />
+          </button>
+        </div>
+
+        <label className="transition-row transition-row--slider" htmlFor="crossfade-range">
+          <div>
+            <strong>{copy.crossfadeLabel}</strong>
+            <p className="muted settings-copy">{copy.crossfadeHint}</p>
+          </div>
+          <span className="transition-value">
+            {crossfadeSeconds > 0 ? `${crossfadeSeconds} s` : copy.crossfadeOff}
+          </span>
+        </label>
+        <input
+          className="volume-slider transition-slider"
+          id="crossfade-range"
+          max={MAX_CROSSFADE_SECONDS}
+          min={0}
+          onChange={(event) => onCrossfadeSecondsChange(Number(event.currentTarget.value))}
+          step={1}
+          style={{ "--pct": `${(crossfadeSeconds / MAX_CROSSFADE_SECONDS) * 100}%` } as CSSProperties}
+          type="range"
+          value={crossfadeSeconds}
+        />
       </div>
     </div>
   );

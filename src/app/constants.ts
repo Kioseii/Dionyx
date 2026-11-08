@@ -21,6 +21,8 @@ export const storageKeys = {
   lastFolderPath: "dionyx:last-folder-path",
   lastTrackPath: "dionyx:last-track-path",
   lastPosition: "dionyx:last-position",
+  gapless: "dionyx:gapless",
+  crossfadeSeconds: "dionyx:crossfade-seconds",
   volume: "dionyx:volume",
   playlists: "dionyx:playlists",
   themeColor: "dionyx:theme-color",

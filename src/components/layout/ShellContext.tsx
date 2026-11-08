@@ -19,6 +19,13 @@ export type ShellContextValue = {
   /** Accent follows the playing cover (falls back to the chosen color). */
   accentFromArtwork: boolean;
   onToggleAccentFromArtwork: () => void;
+  /** Song-to-song transitions (Settings > Playback). */
+  playbackTransitions: {
+    crossfadeSeconds: number;
+    gapless: boolean;
+    onCrossfadeSecondsChange: (seconds: number) => void;
+    onGaplessChange: (enabled: boolean) => void;
+  };
   sleepTimer: Omit<ReturnType<typeof useSleepTimer>, "consumeEndOfTrack">;
   activeDownloadCount: number;
   /** Page shown in the main area, or null for the library / Discover. */

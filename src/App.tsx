@@ -35,6 +35,8 @@ import { useArtworkAccent } from "./hooks/use-artwork-accent";
 import { useKeyboardShortcuts } from "./hooks/use-keyboard-shortcuts";
 import { useResumePosition } from "./hooks/use-resume-position";
 import { useSleepTimer } from "./hooks/use-sleep-timer";
+import { useTrackTransitions } from "./hooks/use-track-transitions";
+import { sanitizeCrossfadeSeconds } from "./app/transitions";
 import { SHORTCUT_SEEK_SECONDS, SHORTCUT_VOLUME_STEP } from "./app/shortcuts";
 import { getTrackArtworkSrc } from "./app/utils";
 import { useLibraryRuntimeState } from "./hooks/use-library-runtime-state";
@@ -91,6 +93,10 @@ function App() {
     themeHexDraft,
     accentFromArtwork,
     setAccentFromArtwork,
+    crossfadeSeconds,
+    gapless,
+    setCrossfadeSeconds,
+    setGapless,
   } = useAppPreferences();
   const copy = uiText[appLanguage];
   const {
@@ -492,6 +498,7 @@ function App() {
   });
   const {
     applyEqualizerPreset,
+    attachElementToEqualizer,
     handleAudioError,
     handleAudioLoadedMetadata,
     handleAudioPause,
@@ -522,6 +529,19 @@ function App() {
     setSelectedEqualizerPresetId,
     setStatusMessage,
     setTracks,
+  });
+  useTrackTransitions({
+    advance: handleTrackEnded,
+    attachElementToEqualizer,
+    audioRef,
+    blocked: repeatMode === "one" || sleepTimer.timer.kind === "end-of-track",
+    crossfadeSeconds,
+    gapless,
+    hasNextTrack:
+      queuePosition < playbackQueue.length - 1 || (repeatMode === "all" && playbackQueue.length > 1),
+    isPlaying,
+    selectedTrackPath: selectedTrack.path ?? "",
+    volume,
   });
   const {
     handleAddDownloadRequest,
@@ -927,6 +947,12 @@ function App() {
   };
 
   const shellValue: ShellContextValue = {
+    playbackTransitions: {
+      crossfadeSeconds,
+      gapless,
+      onCrossfadeSecondsChange: (seconds) => setCrossfadeSeconds(sanitizeCrossfadeSeconds(seconds)),
+      onGaplessChange: setGapless,
+    },
     sleepTimer: {
       cancel: sleepTimer.cancel,
       remainingMs: sleepTimer.remainingMs,

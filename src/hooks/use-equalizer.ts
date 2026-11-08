@@ -62,6 +62,40 @@ export function useEqualizer({
 
   const hasEqualizerGraph = useCallback(() => audioSourceNodeRef.current !== null, []);
 
+  // Extra elements (the crossfade "tail") already routed into the graph.
+  const extraSourcesRef = useRef(new WeakSet<HTMLMediaElement>());
+
+  /**
+   * Routes another element (the end of the previous song during a crossfade)
+   * through the same equalizer, so both sound alike. Without a graph both
+   * elements play directly and nothing needs doing. Like the main element, an
+   * element can be attached only once, which the WeakSet tracks.
+   */
+  const attachElementToEqualizer = useCallback(async (element: HTMLMediaElement) => {
+    const context = audioContextRef.current;
+    const firstFilter = equalizerNodesRef.current[0];
+
+    if (!context || !firstFilter || !audioSourceNodeRef.current) {
+      // No graph: the main element plays directly too, so this one matches it.
+      return true;
+    }
+
+    try {
+      if (!extraSourcesRef.current.has(element)) {
+        context.createMediaElementSource(element).connect(firstFilter);
+        extraSourcesRef.current.add(element);
+      }
+
+      if (context.state === "suspended") {
+        await context.resume();
+      }
+
+      return true;
+    } catch {
+      return false;
+    }
+  }, []);
+
   const ensureEqualizerGraph = useCallback(async () => {
     const audio = audioRef.current;
     const AudioContextCtor = getAudioContextConstructor();
@@ -142,6 +176,7 @@ export function useEqualizer({
   }, [applyEqualizerGainsToNodes, equalizerValues, isEqualizerEnabled]);
 
   return {
+    attachElementToEqualizer,
     ensureEqualizerGraph,
     hasEqualizerGraph,
     isEqualizerSupported,

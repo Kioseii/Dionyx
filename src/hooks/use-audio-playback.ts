@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import type { MutableRefObject, RefObject, SyntheticEvent } from "react";
+import { waitForPlaybackGate } from "../app/playback-gate";
 
 type UseAudioPlaybackOptions = {
   activeDuration: number;
@@ -87,9 +88,15 @@ export function useAudioPlayback({
       return;
     }
 
-    void prepareAudioOutput().then((outputReady) => {
+    void prepareAudioOutput().then(async (outputReady) => {
       if (!outputReady) {
         reportPlaybackError();
+        return;
+      }
+
+      // Gapless: the end of the previous song may still be playing on the
+      // tail element; start right when it finishes (or not at all if cancelled).
+      if (!(await waitForPlaybackGate())) {
         return;
       }
 

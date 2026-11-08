@@ -56,6 +56,7 @@ export function useAudioRuntimeStack({
   setTracks,
 }: UseAudioRuntimeStackOptions) {
   const {
+    attachElementToEqualizer,
     ensureEqualizerGraph,
     hasEqualizerGraph,
     isEqualizerSupported,
@@ -137,6 +138,7 @@ export function useAudioRuntimeStack({
 
   return {
     applyEqualizerPreset,
+    attachElementToEqualizer,
     canUseEqualizerOnResolvedSource,
     ensureEqualizerGraph,
     handleAudioError,

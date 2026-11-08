@@ -10,6 +10,7 @@ import {
   sanitizeLibrarySortKey,
   writeStoredValue,
 } from "../app/utils";
+import { sanitizeCrossfadeSeconds } from "../app/transitions";
 
 export function useAppPreferences() {
   const [appLanguage, setAppLanguage] = useState<AppLanguage>(() =>
@@ -24,6 +25,10 @@ export function useAppPreferences() {
   const [isThemeModalOpen, setIsThemeModalOpen] = useState(false);
   const [themeColor, setThemeColor] = useState(() =>
     sanitizeHexColor(readStoredValue(storageKeys.themeColor)),
+  );
+  const [gapless, setGapless] = useState(() => readStoredValue(storageKeys.gapless) === "true");
+  const [crossfadeSeconds, setCrossfadeSeconds] = useState(() =>
+    sanitizeCrossfadeSeconds(readStoredValue(storageKeys.crossfadeSeconds) ?? 0),
   );
   const [accentFromArtwork, setAccentFromArtwork] = useState(() =>
     readStoredValue(storageKeys.accentFromArtwork) === "true",
@@ -60,6 +65,14 @@ export function useAppPreferences() {
   }, [themeColor]);
 
   useEffect(() => {
+    writeStoredValue(storageKeys.gapless, String(gapless));
+  }, [gapless]);
+
+  useEffect(() => {
+    writeStoredValue(storageKeys.crossfadeSeconds, String(crossfadeSeconds));
+  }, [crossfadeSeconds]);
+
+  useEffect(() => {
     writeStoredValue(storageKeys.accentFromArtwork, String(accentFromArtwork));
   }, [accentFromArtwork]);
 
@@ -85,6 +98,10 @@ export function useAppPreferences() {
 
   return {
     accentFromArtwork,
+    crossfadeSeconds,
+    gapless,
+    setCrossfadeSeconds,
+    setGapless,
     appLanguage,
     detailPanelOpen,
     detailPanelTab,
