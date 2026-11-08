@@ -399,6 +399,39 @@
   height: 68px;
 }
 
+/* The cover ring is now a button that opens the full-screen view. */
+.player-cover-button {
+  border: none;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+
+.player-cover-button:disabled {
+  cursor: default;
+}
+
+.player-cover-button .player-cover {
+  display: block;
+}
+
+.player-cover-expand {
+  position: absolute;
+  inset: 3px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: rgba(8, 7, 12, 0.55);
+  color: #fefbff;
+  opacity: 0;
+  transition: opacity 140ms ease;
+}
+
+.player-cover-button:not(:disabled):hover .player-cover-expand,
+.player-cover-button:focus-visible .player-cover-expand {
+  opacity: 1;
+}
+
 .player-shortcuts {
   display: flex;
   align-items: center;

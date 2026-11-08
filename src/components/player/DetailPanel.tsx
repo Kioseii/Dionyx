@@ -1,6 +1,6 @@
 import { getTrackArtworkSrc } from "../../app/utils";
 import { useEffect, useRef } from "react";
-import { ListMusic, PanelRightClose, PictureInPicture2, SlidersHorizontal } from "lucide-react";
+import { ListMusic, Maximize2, PanelRightClose, PictureInPicture2, SlidersHorizontal } from "lucide-react";
 import { type DetailPanelTab, useShell } from "../layout/ShellContext";
 import type { LibraryTrack, SavedPlaylist } from "../../app/types";
 import { formatTime, getTrackKey } from "../../app/utils";
@@ -125,6 +125,16 @@ export function DetailPanel({
           ))}
         </div>
         <div className="detail-panel-header-actions">
+          <button
+            aria-label={shell.copy.fullscreen}
+            className="detail-icon-button"
+            disabled={!selectedTrack.path && !selectedTrack.source}
+            onClick={shell.onOpenNowPlaying}
+            title={shell.copy.fullscreen}
+            type="button"
+          >
+            <Maximize2 aria-hidden="true" size={16} strokeWidth={2} />
+          </button>
           <button
             aria-label={shell.copy.miniPlayer}
             className="detail-icon-button"

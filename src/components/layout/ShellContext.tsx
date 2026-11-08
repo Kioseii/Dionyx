@@ -28,6 +28,9 @@ export type ShellContextValue = {
   /** Plays library tracks as the queue (shuffled when `shuffle` is true). */
   onPlayLibraryIndices: (indices: number[], shuffle?: boolean) => void;
   onSetLibraryView: (view: LibraryView) => void;
+  nowPlayingOpen: boolean;
+  onCloseNowPlaying: () => void;
+  onOpenNowPlaying: () => void;
   collectionName: string;
   copy: (typeof uiText)[AppLanguage];
   detailPanelOpen: boolean;

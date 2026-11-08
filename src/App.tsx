@@ -1,10 +1,11 @@
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import dionyxLogoRaw from "./assets/dionyx-logo.svg?raw";
 import { equalizerBandsConfig, supportedAudioAccept } from "./app/constants";
 import { getEmptyTrack, uiText } from "./app/ui";
 import { AppModalsHost } from "./components/modals/AppModalsHost";
 import { AppMainStageHost } from "./components/layout/AppMainStageHost";
 import { NoticeToast } from "./components/layout/NoticeToast";
+import { NowPlayingView } from "./components/player/NowPlayingView";
 import { type DetailPanelTab, ShellProvider, type ShellContextValue } from "./components/layout/ShellContext";
 import { TitleBar } from "./components/layout/TitleBar";
 import { AudioNodes } from "./components/player/AudioNodes";
@@ -36,9 +37,11 @@ import { useTrackManagement } from "./hooks/use-track-management";
 import "./App.css";
 import "./styles/shell.css";
 import "./styles/library.css";
+import "./styles/now-playing.css";
 
 function App() {
   const directoryInputRef = useRef<HTMLInputElement | null>(null);
+  const [nowPlayingOpen, setNowPlayingOpen] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const audioPreloadRef = useRef<HTMLAudioElement | null>(null);
   const isTransitioningTrackRef = useRef(false);
@@ -860,6 +863,13 @@ function App() {
       setActivePlaylistId(null);
       playLibraryIndices(indices, shuffle);
     },
+    nowPlayingOpen,
+    onCloseNowPlaying: () => setNowPlayingOpen(false),
+    onOpenNowPlaying: () => {
+      if (selectedTrack.path || selectedTrack.source) {
+        setNowPlayingOpen(true);
+      }
+    },
     onSetLibraryView: (view) => {
       setLibraryFilter(null);
       setLibraryView(view);
@@ -926,6 +936,26 @@ function App() {
       <PlayerBar
         {...playerBarProps}
       />
+
+      {nowPlayingOpen && (selectedTrack.path || selectedTrack.source) ? (
+        <NowPlayingView
+          RepeatIcon={RepeatIcon}
+          activeDuration={activeDuration}
+          displayedPlaybackTime={displayedPlaybackTime}
+          isPlaying={isPlaying}
+          onBeginProgressScrub={beginProgressScrub}
+          onCycleRepeatMode={cycleRepeatMode}
+          onPlayNextTrack={playNextTrack}
+          onPlayPreviousTrack={playPreviousTrack}
+          onSeek={handleSeek}
+          onTogglePlayback={handleTogglePlaybackRequest}
+          onToggleShuffle={toggleShuffle}
+          onUpdateProgressScrub={updateProgressScrub}
+          repeatMode={repeatMode}
+          selectedTrack={selectedTrack}
+          shuffleEnabled={shuffleEnabled}
+        />
+      ) : null}
 
       <NoticeToast />
     </main>

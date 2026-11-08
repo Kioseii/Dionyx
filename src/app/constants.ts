@@ -38,6 +38,7 @@ export const storageKeys = {
   detailPanelOpen: "dionyx:detail-panel-open",
   detailPanelTab: "dionyx:detail-panel-tab",
   libraryView: "dionyx:library-view",
+  showRomaji: "dionyx:show-romaji",
 } as const;
 
 export const legacyStorageKeys = {

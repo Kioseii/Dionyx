@@ -2,6 +2,7 @@ import { getTrackArtworkSrc } from "../../app/utils";
 import { type CSSProperties, type FormEvent } from "react";
 import {
   ListMusic,
+  Maximize2,
   MicVocal,
   Pause,
   PictureInPicture2,
@@ -97,20 +98,28 @@ export function PlayerBar({
         onMouseEnter={(e) => e.currentTarget.querySelectorAll<HTMLElement>(".marquee-clip").forEach(onStartMarquee)}
         onMouseLeave={(e) => e.currentTarget.querySelectorAll<HTMLElement>(".marquee-clip").forEach(onStopMarquee)}
       >
-        <div
-          className="player-cover-ring"
+        <button
+          aria-label={shell.copy.fullscreen}
+          className="player-cover-ring player-cover-button"
+          disabled={!hasTrack}
+          onClick={shell.onOpenNowPlaying}
           style={{ "--cover-progress": `${coverProgressPercent}%` } as CSSProperties}
+          title={shell.copy.fullscreen}
+          type="button"
         >
-          <div className="player-cover">
+          <span className="player-cover">
             {getTrackArtworkSrc(selectedTrack) ? (
               <img
-                alt={`Portada de ${selectedTrack.album}`}
+                alt=""
                 className="player-cover-image"
                 src={getTrackArtworkSrc(selectedTrack) ?? undefined}
               />
             ) : null}
-          </div>
-        </div>
+          </span>
+          <span aria-hidden="true" className="player-cover-expand">
+            <Maximize2 size={16} strokeWidth={2.2} />
+          </span>
+        </button>
         <div className="player-track-info">
           {hasTrack ? (
             <>
