@@ -139,6 +139,8 @@ export function DownloadModal({
           </h1>
         </header>
 
+        <div className="download-layout">
+        <div className="download-main">
         {toolsMissing ? (
           <div className="setup-screen">
             <p className="setup-screen-hint muted">
@@ -399,6 +401,71 @@ export function DownloadModal({
             </div>
           </>
         )}
+        </div>
+
+        <aside className="download-side">
+          <section className="page-card page-card--compact" aria-labelledby="download-side-tools">
+            <h2 className="page-card-title" id="download-side-tools">
+              {appLanguage === "es" ? "Herramientas" : "Tools"}
+            </h2>
+            {[
+              { name: "yt-dlp", available: isYtdlpAvailable, version: ytdlpVersion },
+              { name: "ffmpeg", available: isFfmpegAvailable, version: ffmpegVersion },
+            ].map((tool) => (
+              <div className="download-side-row" key={tool.name}>
+                <span className={`setup-tool-status ${tool.available === null ? "checking" : tool.available ? "ok" : "missing"}`}>
+                  {tool.available === null ? "…" : tool.available ? "✓" : "✗"}
+                </span>
+                <span className="download-side-row-copy">
+                  <strong>{tool.name}</strong>
+                  <span>
+                    {tool.available === null
+                      ? (appLanguage === "es" ? "Comprobando…" : "Checking…")
+                      : tool.available
+                        ? (tool.version ?? (appLanguage === "es" ? "Instalado" : "Installed"))
+                        : (appLanguage === "es" ? "No encontrado" : "Not found")}
+                  </span>
+                </span>
+              </div>
+            ))}
+            <button className="setup-recheck-btn" onClick={onRecheckDeps} type="button">
+              ↻ {appLanguage === "es" ? "Comprobar" : "Check"}
+            </button>
+          </section>
+
+          <section className="page-card page-card--compact" aria-labelledby="download-side-folder">
+            <h2 className="page-card-title" id="download-side-folder">
+              {appLanguage === "es" ? "Dónde se guardan" : "Where files go"}
+            </h2>
+            <p className="download-side-path" title={scannedPath ?? undefined}>
+              {scannedPath ?? copy.downloadNoFolder}
+            </p>
+            <p className="download-side-note">
+              {appLanguage === "es"
+                ? "Al terminar se vuelve a escanear la carpeta y las canciones aparecen en tu biblioteca."
+                : "When a batch finishes the folder is rescanned and the songs appear in your library."}
+            </p>
+          </section>
+
+          <section className="page-card page-card--compact" aria-labelledby="download-side-formats">
+            <h2 className="page-card-title" id="download-side-formats">
+              {appLanguage === "es" ? "Formatos" : "Formats"}
+            </h2>
+            <ul className="download-side-formats">
+              {AUDIO_FORMATS.map((format) => (
+                <li className={format.id === downloadFormat ? "selected" : undefined} key={format.id}>
+                  <span className="download-item-format">{format.label}</span>
+                  <span>
+                    {format.note
+                      ? (appLanguage === "es" ? "Necesita ffmpeg" : "Needs ffmpeg")
+                      : (appLanguage === "es" ? "Directo, sin convertir" : "Direct, no conversion")}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        </aside>
+        </div>
       </section>
   );
 

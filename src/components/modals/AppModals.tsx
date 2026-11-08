@@ -1,5 +1,7 @@
 import { createPortal } from "react-dom";
 import { useShell } from "../layout/ShellContext";
+import { AppearancePreview } from "../pages/AppearancePreview";
+import { AboutSettingsCard, LibrarySettingsCard, PlaybackSettingsCard } from "../pages/SettingsCards";
 import type { ChangeEvent, RefObject } from "react";
 import { Check, ChevronDown } from "lucide-react";
 import { defaultThemeColor, equalizerPresets, fontPresets, themePresets } from "../../app/constants";
@@ -473,6 +475,7 @@ export function PersonalizationModal({
 
       {isSettingsPage ? (
             <div className="settings-panel">
+              <LibrarySettingsCard />
               <div className="settings-card">
                 <strong>{copy.hideOnTrayLabel}</strong>
                 <p className="muted settings-copy">{copy.hideOnTrayHint}</p>
@@ -488,6 +491,8 @@ export function PersonalizationModal({
                   <span className="settings-toggle-thumb" />
                 </button>
               </div>
+
+              <PlaybackSettingsCard />
 
               <div className="settings-card settings-card--tools">
                 <span className="font-preset-label">{appLanguage === "es" ? toolsCopy.toolsEs : toolsCopy.toolsEn}</span>
@@ -595,9 +600,11 @@ export function PersonalizationModal({
                   </button>
                 </div>
               </div>
+
+              <AboutSettingsCard />
             </div>
       ) : (
-        <div className="page-columns">
+        <div className="page-columns appearance-layout">
           <section aria-labelledby="appearance-color-title" className="page-card">
             <h2 className="page-card-title" id="appearance-color-title">{copy.themes}</h2>
               <div className="theme-preview" style={{ backgroundColor: themeColor }}>
@@ -665,6 +672,7 @@ export function PersonalizationModal({
               ))}
             </div>
           </section>
+          <AppearancePreview />
         </div>
       )}
     </div>
