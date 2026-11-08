@@ -624,3 +624,49 @@
 .player-bar:has(.sleep-timer-menu) {
   z-index: 70;
 }
+
+/* Playlists take the space between the menu and the footer and scroll inside
+   it. Before, the section shrank to ~1px on short windows while its content
+   kept drawing at full size, on top of Appearance/Settings and the folder chip. */
+.sidebar .playlist-section {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 96px;
+}
+
+.sidebar .playlist-section .sidebar-section-header {
+  flex-shrink: 0;
+}
+
+.sidebar .playlist-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.sidebar .sidebar-footer {
+  flex-shrink: 0;
+}
+
+/* Little room (short window): the empty-playlists note keeps only its title. */
+.sidebar .playlist-list {
+  container-type: size;
+}
+
+@container (max-height: 130px) {
+  .sidebar .playlist-empty {
+    margin-top: 0;
+    padding: 10px 12px;
+  }
+
+  .sidebar .playlist-empty strong {
+    margin-bottom: 0;
+    font-size: 0.86rem;
+  }
+
+  .sidebar .playlist-empty p {
+    display: none;
+  }
+}
