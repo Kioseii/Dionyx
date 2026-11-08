@@ -87,31 +87,6 @@ export function removeStoredValue(key: string) {
   }
 }
 
-export function clampToDesktopBounds(
-  x: number,
-  y: number,
-  width: number,
-  height: number,
-  monitors: Array<{
-    position: { x: number; y: number };
-    size: { width: number; height: number };
-  }>,
-) {
-  if (monitors.length === 0) {
-    return { x, y };
-  }
-
-  const minX = Math.min(...monitors.map((monitor) => monitor.position.x));
-  const minY = Math.min(...monitors.map((monitor) => monitor.position.y));
-  const maxX = Math.max(...monitors.map((monitor) => monitor.position.x + monitor.size.width));
-  const maxY = Math.max(...monitors.map((monitor) => monitor.position.y + monitor.size.height));
-
-  return {
-    x: Math.min(Math.max(x, minX), Math.max(minX, maxX - width)),
-    y: Math.min(Math.max(y, minY), Math.max(minY, maxY - height)),
-  };
-}
-
 export function parseStoredPlaylists(rawValue: string | null): SavedPlaylist[] {
   if (!rawValue) {
     return [];

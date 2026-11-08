@@ -69,8 +69,8 @@ button {
 }
 
 .app-shell {
-  --app-font-family: "Bahnschrift", "Segoe UI Variable", "Segoe UI", sans-serif;
-  --display-font-family: "Bahnschrift", "Segoe UI Variable", "Segoe UI", sans-serif;
+  --app-font-family: "Bahnschrift", "DIN Alternate", "Segoe UI Variable", "Segoe UI", -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+  --display-font-family: "Bahnschrift", "DIN Alternate", "Segoe UI Variable", "Segoe UI", -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
   --panel-bg: rgba(14, 16, 20, 0.76);
   --panel-bg-strong: rgba(16, 18, 22, 0.88);
   --panel-border: rgb(var(--accent-soft-rgb) / 0.14);

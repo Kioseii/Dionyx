@@ -1,7 +1,8 @@
 import { invoke } from "@tauri-apps/api/core";
+import { ask } from "@tauri-apps/plugin-dialog";
 import { type ChangeEvent, useEffect, useRef, useState } from "react";
 import type { LibraryTrack, SavedPlaylist } from "../app/types";
-import { getTrackArtworkSrc, getTrackKey } from "../app/utils";
+import { getTrackArtworkSrc, getTrackKey, isTauriRuntime } from "../app/utils";
 
 type TrackManagementCopy = {
   editMetaArtworkSizeError: string;
@@ -78,7 +79,12 @@ export function useTrackManagement({
   async function handleDeleteTrack(track: LibraryTrack) {
     setOpenTrackMenuIndex(null);
 
-    if (!window.confirm(copy.trackMenuDeleteConfirm)) {
+    // Native dialog: window.confirm is not reliable in every webview (macOS).
+    const confirmed = isTauriRuntime()
+      ? await ask(copy.trackMenuDeleteConfirm, { kind: "warning", title: "DIONYX" }).catch(() => false)
+      : window.confirm(copy.trackMenuDeleteConfirm);
+
+    if (!confirmed) {
       return;
     }
 

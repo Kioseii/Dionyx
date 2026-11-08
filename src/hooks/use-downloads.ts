@@ -151,6 +151,10 @@ export function useDownloads({
     setYtdlpVersion(null);
     setFfmpegVersion(null);
     checkYtdlp();
+    checkFfmpeg();
+  }
+
+  function checkFfmpeg() {
     invoke<string>("check_ffmpeg")
       .then((version) => {
         setIsFfmpegAvailable(true);
@@ -212,9 +216,11 @@ export function useDownloads({
       }
     }
 
-    // No recheck here: on Windows the running process keeps its old PATH, so a
-    // fresh check right after winget would wrongly report ffmpeg as missing.
-    await runInstallFfmpeg().catch(() => {});
+    // The backend also looks in winget/Homebrew folders, so a check right after
+    // installing works even though this process' PATH is stale.
+    await runInstallFfmpeg()
+      .then(() => checkFfmpeg())
+      .catch(() => {});
   }
 
   useEffect(() => {

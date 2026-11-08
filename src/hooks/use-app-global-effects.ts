@@ -1,11 +1,14 @@
 import type { RefObject } from "react";
+import type { AppLanguage } from "../app/types";
 import { useAppShellEffects } from "./use-app-shell-effects";
 import { useDiscordPresence } from "./use-discord-presence";
 import { useOverlayControls } from "./use-overlay-controls";
 import { usePersistenceSync } from "./use-persistence-sync";
 
 type UseAppGlobalEffectsOptions = {
+  activeDuration: number;
   activePlaylistOpen: boolean;
+  appLanguage: AppLanguage;
   audioRef: RefObject<HTMLAudioElement | null>;
   equalizerPresetMenuRef: RefObject<HTMLDivElement | null>;
   equalizerValues: number[];
@@ -26,11 +29,14 @@ type UseAppGlobalEffectsOptions = {
   setIsEqualizerPresetMenuOpen: (value: boolean) => void;
   setIsLibrarySortMenuOpen: (value: boolean) => void;
   setPlaylistSelectionQuery: (value: string) => void;
+  setStatusMessage: (value: string) => void;
   volume: number;
 };
 
 export function useAppGlobalEffects({
+  activeDuration,
   activePlaylistOpen,
+  appLanguage,
   audioRef,
   equalizerPresetMenuRef,
   equalizerValues,
@@ -51,6 +57,7 @@ export function useAppGlobalEffects({
   setIsEqualizerPresetMenuOpen,
   setIsLibrarySortMenuOpen,
   setPlaylistSelectionQuery,
+  setStatusMessage,
   volume,
 }: UseAppGlobalEffectsOptions) {
   usePersistenceSync({
@@ -83,10 +90,13 @@ export function useAppGlobalEffects({
   });
 
   useDiscordPresence({
+    activeDuration,
+    appLanguage,
     audioRef,
     getItunesCover,
     isPlaying,
     selectedTrackArtist,
     selectedTrackTitle,
+    setStatusMessage,
   });
 }

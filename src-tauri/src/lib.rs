@@ -166,30 +166,100 @@ fn lock_discord(state: &DiscordState) -> std::sync::MutexGuard<'_, Option<Discor
 }
 
 #[cfg(target_os = "windows")]
-fn discord_set_activity_legacy(pipe: &mut DiscordPipe, payload: serde_json::Value) -> bool {
-    if discord_drain(&mut pipe.0).is_err() {
-        return false;
-    }
+enum DiscordSendError {
+    /// The pipe broke: reconnect and retry.
+    Pipe,
+    /// Discord answered with an ERROR event (shown to the user).
+    Rejected(String),
+}
 
+/// Sends SET_ACTIVITY and waits briefly for Discord's answer to that nonce, so
+/// rejections (bad client id, invalid payload, ...) are reported instead of
+/// silently ignored. No answer within the timeout counts as success.
+#[cfg(target_os = "windows")]
+fn discord_set_activity(
+    pipe: &mut DiscordPipe,
+    payload: serde_json::Value,
+) -> Result<(), DiscordSendError> {
+    discord_drain(&mut pipe.0).map_err(|_| DiscordSendError::Pipe)?;
+
+    let nonce = uuid_v4();
     let msg = serde_json::json!({
         "cmd": "SET_ACTIVITY",
         "args": {
             "pid": std::process::id(),
             "activity": payload
         },
-        "nonce": uuid_v4()
+        "nonce": nonce
     })
     .to_string();
 
-    discord_write(&mut pipe.0, 1, &msg).is_ok()
+    discord_write(&mut pipe.0, 1, &msg).map_err(|_| DiscordSendError::Pipe)?;
+    discord_await_response(&mut pipe.0, &nonce, Duration::from_millis(600))
 }
+
+#[cfg(target_os = "windows")]
+fn discord_await_response(
+    f: &mut std::fs::File,
+    nonce: &str,
+    timeout: Duration,
+) -> Result<(), DiscordSendError> {
+    let deadline = std::time::Instant::now() + timeout;
+
+    loop {
+        match discord_bytes_available(f) {
+            None => return Err(DiscordSendError::Pipe),
+            Some(available) if available >= 8 => {
+                let frame = discord_read(f).map_err(|_| DiscordSendError::Pipe)?;
+                if let Some(result) = discord_response_for_nonce(&frame, nonce) {
+                    return result.map_err(DiscordSendError::Rejected);
+                }
+            }
+            Some(_) => {
+                if std::time::Instant::now() >= deadline {
+                    return Ok(());
+                }
+                std::thread::sleep(Duration::from_millis(25));
+            }
+        }
+    }
+}
+
+/// `Some(Ok)` / `Some(Err(message))` if `frame` answers `nonce`, else `None`.
+fn discord_response_for_nonce(frame: &str, nonce: &str) -> Option<Result<(), String>> {
+    let value = serde_json::from_str::<serde_json::Value>(frame).ok()?;
+
+    if value.get("nonce").and_then(|n| n.as_str()) != Some(nonce) {
+        return None;
+    }
+
+    if value.get("evt").and_then(|e| e.as_str()) == Some("ERROR") {
+        let message = value
+            .pointer("/data/message")
+            .and_then(|m| m.as_str())
+            .unwrap_or("Discord rechazo la actividad.")
+            .to_string();
+        return Some(Err(message));
+    }
+
+    Some(Ok(()))
+}
+
+/// Error string the frontend treats as "Discord is not open" (not shown).
+#[cfg(target_os = "windows")]
+const DISCORD_NOT_RUNNING: &str = "discord-not-running";
 
 fn uuid_v4() -> String {
     use std::collections::hash_map::DefaultHasher;
     use std::hash::{Hash, Hasher};
+    use std::sync::atomic::AtomicU64;
+
+    // Nonces are matched against Discord's answers: never reuse one.
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
     let mut h = DefaultHasher::new();
     SystemTime::now().hash(&mut h);
     std::process::id().hash(&mut h);
+    COUNTER.fetch_add(1, Ordering::Relaxed).hash(&mut h);
     let n = h.finish();
     format!(
         "{:016x}-{:04x}-4{:03x}-{:04x}-{:012x}",
@@ -224,10 +294,10 @@ async fn update_discord_presence(
             elapsed_secs,
             duration_secs,
             is_playing,
-        );
+        )
     })
     .await
-    .map_err(|e| e.to_string())
+    .map_err(|e| e.to_string())?
 }
 
 #[cfg(target_os = "windows")]
@@ -239,14 +309,18 @@ fn update_discord_presence_blocking(
     elapsed_secs: f64,
     duration_secs: f64,
     is_playing: bool,
-) {
+) -> Result<(), String> {
     let mut guard = lock_discord(state);
 
     if guard.is_none() {
         *guard = discord_connect();
     }
 
-    if let Some(pipe) = guard.as_mut() {
+    let Some(pipe) = guard.as_mut() else {
+        return Err(DISCORD_NOT_RUNNING.into());
+    };
+
+    {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
@@ -275,12 +349,22 @@ fn update_discord_presence_blocking(
             activity["timestamps"] = serde_json::json!({ "start": start_ts });
         }
 
-        if !discord_set_activity_legacy(pipe, activity.clone()) {
-            *guard = None;
-            if let Some(new_pipe) = discord_connect() {
-                *guard = Some(new_pipe);
-                if let Some(reconnected_pipe) = guard.as_mut() {
-                    discord_set_activity_legacy(reconnected_pipe, activity);
+        match discord_set_activity(pipe, activity.clone()) {
+            Ok(()) => Ok(()),
+            Err(DiscordSendError::Rejected(message)) => Err(message),
+            Err(DiscordSendError::Pipe) => {
+                // Discord restarted: reconnect once and retry.
+                *guard = discord_connect();
+                match guard.as_mut() {
+                    None => Err(DISCORD_NOT_RUNNING.into()),
+                    Some(reconnected) => match discord_set_activity(reconnected, activity) {
+                        Ok(()) => Ok(()),
+                        Err(DiscordSendError::Rejected(message)) => Err(message),
+                        Err(DiscordSendError::Pipe) => {
+                            *guard = None;
+                            Err(DISCORD_NOT_RUNNING.into())
+                        }
+                    },
                 }
             }
         }
@@ -902,7 +986,7 @@ async fn check_ffmpeg() -> Result<String, String> {
 }
 
 fn check_ffmpeg_blocking() -> Result<String, String> {
-    let mut cmd = std::process::Command::new("ffmpeg");
+    let mut cmd = std::process::Command::new(ffmpeg_exe());
     cmd.arg("-version");
     #[cfg(target_os = "windows")]
     cmd.creation_flags(CREATE_NO_WINDOW);
@@ -987,6 +1071,12 @@ fn append_platform_specific_ytdlp_args(args: &mut Vec<String>) {
         "youtube:player_client=default,-android_sdkless".into(),
     ]);
 
+    // yt-dlp also needs ffmpeg (--extract-audio, thumbnails); hand it the one we
+    // found so it works even when ffmpeg is not on this process' PATH.
+    if let Some(ffmpeg) = find_executable("ffmpeg") {
+        args.extend(["--ffmpeg-location".into(), ffmpeg.display().to_string()]);
+    }
+
     #[cfg(target_os = "windows")]
     {
         args.push("--windows-filenames".into());
@@ -1000,14 +1090,78 @@ fn is_likely_youtube_video_id(value: &str) -> bool {
             .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
 }
 
-/// Finds yt-dlp: prefers the local tools dir, falls back to system PATH.
+/// Finds yt-dlp: prefers the local tools dir, then PATH and the usual package
+/// manager folders (see `find_executable`).
 fn ytdlp_exe(app: &tauri::AppHandle) -> PathBuf {
     let local = tools_dir(app).join(managed_ytdlp_filename());
     if local.exists() {
         local
     } else {
-        PathBuf::from("yt-dlp")
+        find_executable("yt-dlp").unwrap_or_else(|| PathBuf::from("yt-dlp"))
     }
+}
+
+/// Folders where package managers put executables but that are often missing
+/// from this process' PATH: a macOS app opened from Finder only gets
+/// /usr/bin:/bin:/usr/sbin:/sbin, and on Windows the PATH of a running process
+/// is not refreshed after `winget install`.
+fn extra_tool_dirs() -> Vec<PathBuf> {
+    let mut dirs = Vec::new();
+
+    #[cfg(target_os = "windows")]
+    {
+        if let Some(local) = std::env::var_os("LOCALAPPDATA") {
+            dirs.push(PathBuf::from(local).join("Microsoft").join("WinGet").join("Links"));
+        }
+        if let Some(program_files) = std::env::var_os("ProgramFiles") {
+            dirs.push(PathBuf::from(program_files).join("WinGet").join("Links"));
+        }
+        if let Some(profile) = std::env::var_os("USERPROFILE") {
+            dirs.push(PathBuf::from(profile).join("scoop").join("shims"));
+        }
+        dirs.push(PathBuf::from(r"C:\ProgramData\chocolatey\bin"));
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        dirs.push(PathBuf::from("/opt/homebrew/bin"));
+        dirs.push(PathBuf::from("/usr/local/bin"));
+        dirs.push(PathBuf::from("/opt/local/bin"));
+    }
+
+    #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
+    {
+        dirs.push(PathBuf::from("/usr/local/bin"));
+        if let Some(home) = std::env::var_os("HOME") {
+            dirs.push(PathBuf::from(home).join(".local").join("bin"));
+        }
+    }
+
+    dirs
+}
+
+/// Looks for `name` (plus `.exe` on Windows) in PATH, then in `extra_tool_dirs`.
+fn find_executable(name: &str) -> Option<PathBuf> {
+    let file_name = if cfg!(target_os = "windows") {
+        format!("{name}.exe")
+    } else {
+        name.to_string()
+    };
+
+    let path_dirs = std::env::var_os("PATH")
+        .map(|paths| std::env::split_paths(&paths).collect::<Vec<_>>())
+        .unwrap_or_default();
+
+    path_dirs
+        .into_iter()
+        .chain(extra_tool_dirs())
+        .map(|dir| dir.join(&file_name))
+        .find(|candidate| candidate.is_file())
+}
+
+/// ffmpeg resolved through `find_executable`, falling back to the bare name.
+fn ffmpeg_exe() -> PathBuf {
+    find_executable("ffmpeg").unwrap_or_else(|| PathBuf::from("ffmpeg"))
 }
 
 // ── Tool install commands ─────────────────────────────────────────────────
@@ -1206,7 +1360,9 @@ async fn install_ffmpeg(app: tauri::AppHandle) -> Result<(), String> {
     let out = tokio::task::spawn_blocking(|| {
         #[cfg(target_os = "windows")]
         let mut cmd = {
-            let mut cmd = std::process::Command::new("winget");
+            let mut cmd = std::process::Command::new(
+                find_executable("winget").unwrap_or_else(|| PathBuf::from("winget")),
+            );
             cmd.args([
                 "install",
                 "--id",
@@ -1220,7 +1376,10 @@ async fn install_ffmpeg(app: tauri::AppHandle) -> Result<(), String> {
 
         #[cfg(target_os = "macos")]
         let mut cmd = {
-            let mut cmd = std::process::Command::new("brew");
+            // Finder-launched apps do not have Homebrew on PATH.
+            let mut cmd = std::process::Command::new(
+                find_executable("brew").unwrap_or_else(|| PathBuf::from("brew")),
+            );
             cmd.args(["install", "ffmpeg"]);
             cmd
         };
@@ -1861,7 +2020,7 @@ fn convert_audio(src: &Path, format: &str, meta: TrackMeta) -> bool {
     args.extend([dst_str.into(), "-y".into()]);
 
     let run_ffmpeg = |a: &[String]| -> bool {
-        let mut ff = std::process::Command::new("ffmpeg");
+        let mut ff = std::process::Command::new(ffmpeg_exe());
         ff.args(a);
         #[cfg(target_os = "windows")]
         ff.creation_flags(CREATE_NO_WINDOW);
@@ -1992,7 +2151,7 @@ fn embed_thumbnail_inplace(src: &Path) {
     }
     args.extend([tmp_str.to_string(), "-y".to_string()]);
 
-    let mut ff = std::process::Command::new("ffmpeg");
+    let mut ff = std::process::Command::new(ffmpeg_exe());
     ff.args(&args);
     #[cfg(target_os = "windows")]
     ff.creation_flags(CREATE_NO_WINDOW);
@@ -2028,15 +2187,20 @@ fn extract_ydlp_field(line: &str, keyword: &str) -> String {
 
 // ── entry point ───────────────────────────────────────────────────────────
 
+/// Brings the main window back (from the tray, minimized or hidden).
+fn show_main_window(app: &tauri::AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.unminimize();
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let app = tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            if let Some(window) = app.get_webview_window("main") {
-                let _ = window.unminimize();
-                let _ = window.show();
-                let _ = window.set_focus();
-            }
+            show_main_window(app);
         }))
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
@@ -2088,19 +2252,12 @@ pub fn run() {
                         ..
                     } = event
                     {
-                        let app = tray.app_handle();
-                        if let Some(window) = app.get_webview_window("main") {
-                            let _ = window.show();
-                            let _ = window.set_focus();
-                        }
+                        show_main_window(tray.app_handle());
                     }
                 })
                 .on_menu_event(|app, event| match event.id.as_ref() {
                     "show" => {
-                        if let Some(window) = app.get_webview_window("main") {
-                            let _ = window.show();
-                            let _ = window.set_focus();
-                        }
+                        show_main_window(app);
                     }
                     "quit" => {
                         app.exit(0);
@@ -2125,8 +2282,21 @@ pub fn run() {
                 }
             }
         })
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application");
+
+    app.run(|_app_handle, _event| {
+        // macOS: clicking the Dock icon while the window is hidden in the tray
+        // ("hide on close") must bring it back.
+        #[cfg(target_os = "macos")]
+        if let tauri::RunEvent::Reopen {
+            has_visible_windows: false,
+            ..
+        } = _event
+        {
+            show_main_window(_app_handle);
+        }
+    });
 }
 
 #[cfg(test)]
@@ -2183,6 +2353,50 @@ mod tests {
         assert!(ensure_library_folder(&state, &outside.display().to_string()).is_err());
 
         let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn discord_response_matching() {
+        let ok = r#"{"cmd":"SET_ACTIVITY","evt":null,"nonce":"n1","data":{}}"#;
+        let err = r#"{"cmd":"SET_ACTIVITY","evt":"ERROR","nonce":"n2","data":{"code":4000,"message":"child \"activity\" fails"}}"#;
+        assert_eq!(discord_response_for_nonce(ok, "n1"), Some(Ok(())));
+        assert_eq!(discord_response_for_nonce(ok, "other"), None);
+        assert_eq!(
+            discord_response_for_nonce(err, "n2"),
+            Some(Err("child \"activity\" fails".into()))
+        );
+        assert_eq!(discord_response_for_nonce("not json", "n1"), None);
+    }
+
+    #[test]
+    fn nonces_are_unique() {
+        let a = uuid_v4();
+        let b = uuid_v4();
+        assert_ne!(a, b);
+    }
+
+    #[test]
+    fn find_executable_searches_path() {
+        let dir = std::env::temp_dir().join(format!("dionyx-bin-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let name = "dionyx-fake-tool";
+        let file = if cfg!(target_os = "windows") {
+            dir.join(format!("{name}.exe"))
+        } else {
+            dir.join(name)
+        };
+        std::fs::write(&file, b"x").unwrap();
+
+        let old_path = std::env::var_os("PATH").unwrap_or_default();
+        let mut paths = vec![dir.clone()];
+        paths.extend(std::env::split_paths(&old_path));
+        std::env::set_var("PATH", std::env::join_paths(paths).unwrap());
+        assert_eq!(find_executable(name), Some(file));
+        std::env::set_var("PATH", old_path);
+
+        assert_eq!(find_executable("dionyx-surely-missing-tool"), None);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

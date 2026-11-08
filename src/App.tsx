@@ -20,6 +20,7 @@ import { useBrowserSources } from "./hooks/use-browser-sources";
 import { useDiscover } from "./hooks/use-discover";
 import { usePlayerChromeHostOptions } from "./hooks/use-player-chrome-host-options";
 import { useLibraryScan } from "./hooks/use-library-scan";
+import { useMediaSession } from "./hooks/use-media-session";
 import { useLibraryRuntimeState } from "./hooks/use-library-runtime-state";
 import { useMainStageHostOptions } from "./hooks/use-main-stage-host-options";
 import { usePlaybackScrub } from "./hooks/use-playback-scrub";
@@ -773,8 +774,20 @@ function App() {
     playerChromePropsOptions,
     sidebarPropsOptions,
   });
+  useMediaSession({
+    activeDuration,
+    audioRef,
+    isPlaying,
+    onNext: playNextTrack,
+    onPrevious: playPreviousTrack,
+    onSeek: handleSeek,
+    onTogglePlayback: handleTogglePlaybackRequest,
+    selectedTrack,
+  });
   useAppGlobalEffects({
+    activeDuration,
     activePlaylistOpen: Boolean(activePlaylist),
+    appLanguage,
     audioRef,
     equalizerPresetMenuRef,
     equalizerValues,
@@ -795,6 +808,7 @@ function App() {
     setIsEqualizerPresetMenuOpen,
     setIsLibrarySortMenuOpen,
     setPlaylistSelectionQuery,
+    setStatusMessage,
     volume,
   });
 
