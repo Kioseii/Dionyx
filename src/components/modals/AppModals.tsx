@@ -1,3 +1,4 @@
+import { ModalFrame } from "./ModalFrame";
 import { createPortal } from "react-dom";
 import { useShell } from "../layout/ShellContext";
 import { AppearancePreview } from "../pages/AppearancePreview";
@@ -105,18 +106,11 @@ export function EditMetadataModal({
   }
 
   return (
-    <div
-      aria-hidden="true"
-      className="modal-backdrop"
-      onClick={onClose}
+    <ModalFrame
+      className="edit-meta-modal"
+      labelledBy="edit-meta-modal-title"
+      onClose={onClose}
     >
-      <div
-        aria-labelledby="edit-meta-modal-title"
-        aria-modal="true"
-        className="modal-shell edit-meta-modal"
-        onClick={(e) => e.stopPropagation()}
-        role="dialog"
-      >
         <div className="edit-meta-header">
           <h2 className="modal-title" id="edit-meta-modal-title">
             {copy.editMetaTitle}
@@ -204,8 +198,7 @@ export function EditMetadataModal({
             {isSavingMeta ? copy.editMetaSaving : copy.editMetaSave}
           </button>
         </div>
-      </div>
-    </div>
+    </ModalFrame>
   );
 }
 
@@ -253,20 +246,11 @@ export function EqualizerModal({
   }
 
   return (
-    <div
-      aria-hidden="true"
-      className="modal-backdrop"
-      onClick={onClose}
+    <ModalFrame
+      className="equalizer-modal"
+      labelledBy="equalizer-modal-title"
+      onClose={onClose}
     >
-      <div
-        aria-labelledby="equalizer-modal-title"
-        aria-modal="true"
-        className="modal-shell equalizer-modal"
-        onClick={(event) => {
-          event.stopPropagation();
-        }}
-        role="dialog"
-      >
         <div className="equalizer-modal-header">
           <div className="equalizer-modal-title-block">
             <h3 id="equalizer-modal-title">{copy.equalizerModalTitle}</h3>
@@ -310,6 +294,9 @@ export function EqualizerModal({
                   />
                 </span>
                 <span className="equalizer-frequency-short">{band.id}</span>
+                <span className="equalizer-band-value">
+                  {equalizerValues[index] > 0 ? `+${equalizerValues[index]}` : equalizerValues[index]} dB
+                </span>
               </label>
             ))}
           </div>
@@ -365,8 +352,7 @@ export function EqualizerModal({
             {copy.done}
           </button>
         </div>
-      </div>
-    </div>
+    </ModalFrame>
   );
 }
 

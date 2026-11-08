@@ -1,3 +1,4 @@
+import { ModalFrame } from "./ModalFrame";
 import type { LibraryTrack, SavedPlaylist } from "../../app/types";
 
 type PlaylistCopy = {
@@ -64,20 +65,10 @@ export function PlaylistModal({
   }
 
   return (
-    <div
-      aria-hidden="true"
-      className="modal-backdrop"
-      onClick={onClose}
+    <ModalFrame
+      labelledBy="playlist-modal-title"
+      onClose={onClose}
     >
-      <div
-        aria-labelledby="playlist-modal-title"
-        aria-modal="true"
-        className="modal-shell"
-        onClick={(event) => {
-          event.stopPropagation();
-        }}
-        role="dialog"
-      >
         <p className="eyebrow">
           {playlistModalMode === "edit" ? copy.editPlaylist : copy.newPlaylistTitle}
         </p>
@@ -157,8 +148,7 @@ export function PlaylistModal({
             {playlistModalMode === "edit" ? copy.saveChanges : copy.createPlaylist}
           </button>
         </div>
-      </div>
-    </div>
+    </ModalFrame>
   );
 }
 
@@ -192,20 +182,11 @@ export function TrackPlaylistModal({
   }
 
   return (
-    <div
-      aria-hidden="true"
-      className="modal-backdrop"
-      onClick={onClose}
+    <ModalFrame
+      className="quick-save-modal"
+      labelledBy="track-playlist-modal-title"
+      onClose={onClose}
     >
-      <div
-        aria-labelledby="track-playlist-modal-title"
-        aria-modal="true"
-        className="modal-shell quick-save-modal"
-        onClick={(event) => {
-          event.stopPropagation();
-        }}
-        role="dialog"
-      >
         <p className="eyebrow">{copy.saveSong}</p>
         <h3 id="track-playlist-modal-title">{copy.saveTrackToPlaylist}</h3>
         <p className="muted modal-copy">
@@ -274,8 +255,7 @@ export function TrackPlaylistModal({
             {copy.createAndSave}
           </button>
         </div>
-      </div>
-    </div>
+    </ModalFrame>
   );
 }
 
@@ -301,20 +281,11 @@ export function RenamePlaylistModal({
   }
 
   return (
-    <div
-      aria-hidden="true"
-      className="modal-backdrop"
-      onClick={onClose}
+    <ModalFrame
+      className="quick-save-modal"
+      labelledBy="rename-playlist-modal-title"
+      onClose={onClose}
     >
-      <div
-        aria-labelledby="rename-playlist-modal-title"
-        aria-modal="true"
-        className="modal-shell quick-save-modal"
-        onClick={(event) => {
-          event.stopPropagation();
-        }}
-        role="dialog"
-      >
         <p className="eyebrow">{copy.renamePlaylist}</p>
         <h3 id="rename-playlist-modal-title">{copy.chooseNewName}</h3>
         <label className="modal-field" htmlFor="rename-playlist-input">
@@ -343,7 +314,6 @@ export function RenamePlaylistModal({
             {copy.saveName}
           </button>
         </div>
-      </div>
-    </div>
+    </ModalFrame>
   );
 }

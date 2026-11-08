@@ -44,6 +44,7 @@ import "./styles/shell.css";
 import "./styles/library.css";
 import "./styles/now-playing.css";
 import "./styles/pages.css";
+import "./styles/modals.css";
 
 function App() {
   const directoryInputRef = useRef<HTMLInputElement | null>(null);
