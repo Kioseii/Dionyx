@@ -19,6 +19,7 @@ type UsePlaylistLibraryStackOptions = {
   handleSeek: (value: number) => void;
   ignoreNextRowClickRef: MutableRefObject<boolean>;
   isTransitioningTrackRef: MutableRefObject<boolean>;
+  libraryFilterIndices: number[] | null;
   librarySortKey: LibrarySortKey;
   playbackTime: number;
   scannedPath: string | null;
@@ -45,6 +46,7 @@ export function usePlaylistLibraryStack({
   handleSeek,
   ignoreNextRowClickRef,
   isTransitioningTrackRef,
+  libraryFilterIndices,
   librarySortKey,
   playbackTime,
   scannedPath,
@@ -84,6 +86,7 @@ export function usePlaylistLibraryStack({
     displayTrackIndicesRef,
     handleSeek,
     isTransitioningTrackRef,
+    libraryTrackCount: tracks.length,
     librarySortKey,
     playbackPlaylistId: playlists.playbackPlaylistId,
     playbackTime,
@@ -100,6 +103,7 @@ export function usePlaylistLibraryStack({
     appLanguage,
     currentTrackIndex,
     displayTrackIndicesRef,
+    libraryFilterIndices,
     librarySortKey,
     playbackQueue: playbackNavigation.playbackQueue,
     playbackTracks: playlists.playbackTracks,

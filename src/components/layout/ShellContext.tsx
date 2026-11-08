@@ -1,5 +1,7 @@
 import { createContext, useContext } from "react";
-import type { AppLanguage } from "../../app/types";
+import type { LibraryFilter, TrackGroup } from "../../app/library-groups";
+import type { AppLanguage, LibraryTrack } from "../../app/types";
+import type { LibraryView } from "../../hooks/use-library-browse";
 import type { uiText } from "../../app/ui";
 
 export type DetailPanelTab = "now" | "lyrics" | "queue";
@@ -11,6 +13,21 @@ export type DetailPanelTab = "now" | "lyrics" | "queue";
  */
 export type ShellContextValue = {
   activeDownloadCount: number;
+  /** Open album/artist (null on the grids and in the songs list). */
+  activeGroup: TrackGroup | null;
+  albumGroups: TrackGroup[];
+  appLanguage: AppLanguage;
+  artistGroups: TrackGroup[];
+  libraryFilter: LibraryFilter;
+  libraryView: LibraryView;
+  onCloseLibraryGroup: () => void;
+  onOpenAlbum: (albumKey: string) => void;
+  onOpenArtist: (artistKey: string) => void;
+  onOpenTrackAlbum: (track: LibraryTrack) => void;
+  onOpenTrackArtist: (track: LibraryTrack) => void;
+  /** Plays library tracks as the queue (shuffled when `shuffle` is true). */
+  onPlayLibraryIndices: (indices: number[], shuffle?: boolean) => void;
+  onSetLibraryView: (view: LibraryView) => void;
   collectionName: string;
   copy: (typeof uiText)[AppLanguage];
   detailPanelOpen: boolean;

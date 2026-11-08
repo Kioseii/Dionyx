@@ -19,6 +19,7 @@ type UsePlaybackNavigationOptions = {
   displayTrackIndicesRef: MutableRefObject<number[]>;
   handleSeek: (value: number) => void;
   isTransitioningTrackRef: MutableRefObject<boolean>;
+  libraryTrackCount: number;
   librarySortKey: LibrarySortKey;
   playbackPlaylistId: string | null;
   playbackTracks: LibraryTrack[];
@@ -39,6 +40,7 @@ export function usePlaybackNavigation({
   displayTrackIndicesRef,
   handleSeek,
   isTransitioningTrackRef,
+  libraryTrackCount,
   librarySortKey,
   playbackPlaylistId,
   playbackTime,
@@ -156,6 +158,40 @@ export function usePlaybackNavigation({
     }
 
     jumpToTrackIndex(index, shouldAutoplay);
+  }
+
+  /**
+   * Plays a set of library tracks (an album, an artist, the visible list) as
+   * the queue, from its first track — or shuffled when `shuffle` is true.
+   */
+  function playLibraryIndices(indices: number[], shuffle = shuffleEnabled) {
+    const valid = indices.filter((index) => index >= 0 && index < libraryTrackCount);
+
+    if (valid.length === 0) {
+      return;
+    }
+
+    const startPosition = shuffle ? Math.floor(Math.random() * valid.length) : 0;
+    const nextQueue = shuffle ? buildShuffledQueueFromIndices(valid, startPosition) : [...valid];
+
+    // Describe the new queue to the queue effect so it does not rebuild it
+    // from whatever list is on screen.
+    queueBuildStateRef.current = {
+      sourceId: "library",
+      sourceLength: libraryTrackCount,
+      shuffle,
+      sortKey: librarySortKey,
+      linearBase: [...valid],
+    };
+
+    setShuffleEnabled(shuffle);
+    setPlaybackPlaylistId(null);
+    setPlaybackQueue(nextQueue);
+    setQueuePosition(0);
+    setCurrentTrackIndex(nextQueue[0]);
+    setPlaybackTime(0);
+    setActiveDuration(0);
+    setIsPlaying(true);
   }
 
   function playPreviousTrack() {
@@ -304,6 +340,7 @@ export function usePlaybackNavigation({
     jumpToQueuePosition,
     playbackQueue,
     playbackRate,
+    playLibraryIndices,
     playNextTrack,
     playPreviousTrack,
     queuePosition,

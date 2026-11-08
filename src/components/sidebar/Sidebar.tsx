@@ -1,4 +1,5 @@
 import { Compass, Download, FolderOpen, ListMusic, Palette, Plus, RefreshCw, Settings } from "lucide-react";
+import { countLabel } from "../../app/library-groups";
 import { useShell } from "../layout/ShellContext";
 import type { SavedPlaylist } from "../../app/types";
 
@@ -200,7 +201,7 @@ export function Sidebar({
           <FolderOpen aria-hidden="true" className="library-chip-icon" size={18} strokeWidth={2} />
           <span className="library-chip-copy">
             <strong>{libraryName}</strong>
-            <span>{`${shell.libraryTrackCount} ${shell.copy.tracksCountLabel}`}</span>
+            <span>{countLabel(shell.libraryTrackCount, shell.copy.trackCountSingular, shell.copy.tracksCountLabel)}</span>
           </span>
           <button
             aria-label={shell.isScanning ? shell.copy.scanning : shell.copy.scanNow}

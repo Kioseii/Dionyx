@@ -37,6 +37,7 @@ export const storageKeys = {
   miniPlayerPos: "dionyx:mini-player-pos",
   detailPanelOpen: "dionyx:detail-panel-open",
   detailPanelTab: "dionyx:detail-panel-tab",
+  libraryView: "dionyx:library-view",
 } as const;
 
 export const legacyStorageKeys = {

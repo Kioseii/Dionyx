@@ -8,6 +8,8 @@ type UseLibraryViewModelOptions = {
   appLanguage: AppLanguage;
   currentTrackIndex: number;
   displayTrackIndicesRef: MutableRefObject<number[]>;
+  /** Library indices of the open album/artist, in its own order (null: no filter). */
+  libraryFilterIndices: number[] | null;
   playbackQueue: number[];
   playbackTracks: LibraryTrack[];
   searchQuery: string;
@@ -20,6 +22,7 @@ export function useLibraryViewModel({
   appLanguage,
   currentTrackIndex,
   displayTrackIndicesRef,
+  libraryFilterIndices,
   librarySortKey,
   playbackQueue,
   playbackTracks,
@@ -27,8 +30,15 @@ export function useLibraryViewModel({
   sourceTracks,
 }: UseLibraryViewModelOptions) {
   const normalizedSearch = searchQuery.trim().toLowerCase();
-  const filteredTrackRows = sourceTracks
-    .map((track, index) => ({ track, index }))
+  // An open album/artist narrows the library to its tracks, in its own order
+  // (so playing from it queues exactly that album/artist). Playlists ignore it.
+  const groupFilter = !activePlaylist && libraryFilterIndices ? libraryFilterIndices : null;
+  const baseRows = groupFilter
+    ? groupFilter
+        .filter((index) => index >= 0 && index < sourceTracks.length)
+        .map((index) => ({ track: sourceTracks[index], index }))
+    : sourceTracks.map((track, index) => ({ track, index }));
+  const filteredTrackRows = baseRows
     .filter(({ track }) => {
       if (!normalizedSearch) {
         return true;
@@ -47,7 +57,7 @@ export function useLibraryViewModel({
     });
 
   const displayTrackRows = (() => {
-    if (activePlaylist) {
+    if (activePlaylist || groupFilter) {
       return filteredTrackRows;
     }
 

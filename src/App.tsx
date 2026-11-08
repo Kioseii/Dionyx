@@ -21,7 +21,9 @@ import { useAudioRuntimeStack } from "./hooks/use-audio-runtime-stack";
 import { useBrowserSources } from "./hooks/use-browser-sources";
 import { useDiscover } from "./hooks/use-discover";
 import { usePlayerChromeHostOptions } from "./hooks/use-player-chrome-host-options";
+import { useLibraryBrowse } from "./hooks/use-library-browse";
 import { useLibraryScan } from "./hooks/use-library-scan";
+import { getAlbumKey, getArtistKey } from "./app/library-groups";
 import { useMediaSession } from "./hooks/use-media-session";
 import { useLibraryRuntimeState } from "./hooks/use-library-runtime-state";
 import { useMainStageHostOptions } from "./hooks/use-main-stage-host-options";
@@ -33,6 +35,7 @@ import { useSidebarHostOptions } from "./hooks/use-sidebar-host-options";
 import { useTrackManagement } from "./hooks/use-track-management";
 import "./App.css";
 import "./styles/shell.css";
+import "./styles/library.css";
 
 function App() {
   const directoryInputRef = useRef<HTMLInputElement | null>(null);
@@ -140,6 +143,16 @@ function App() {
     volume,
   } = usePlayerControlState();
   const { revokeBrowserSources, setUpdatedBrowserSources } = useBrowserSources();
+  const {
+    activeGroup,
+    albumGroups,
+    artistGroups,
+    libraryFilter,
+    libraryFilterIndices,
+    libraryView,
+    setLibraryFilter,
+    setLibraryView,
+  } = useLibraryBrowse({ tracks, variousArtistsLabel: copy.variousArtists });
 
   const {
     beginProgressScrub,
@@ -184,6 +197,7 @@ function App() {
     playbackPlaylistId,
     playbackQueue,
     playbackRate,
+    playLibraryIndices,
     playlistDraftName,
     playlistHasTrack,
     playlistModalMode,
@@ -237,6 +251,7 @@ function App() {
     handleSeek,
     ignoreNextRowClickRef,
     isTransitioningTrackRef,
+    libraryFilterIndices,
     librarySortKey,
     playbackTime,
     scannedPath,
@@ -576,7 +591,10 @@ function App() {
     onCreatePlaylist: createPlaylistFromCurrentSource,
     onDeletePlaylist: deletePlaylist,
     onOpenDiscover: handleOpenDiscover,
-    onOpenLibrary: returnToLibraryView,
+    onOpenLibrary: () => {
+      setLibraryFilter(null);
+      returnToLibraryView();
+    },
     onOpenPlaylistEditor: openPlaylistEditor,
     onOpenPlaylistRename: openPlaylistRenameModal,
     onPlayPlaylistShuffled: playPlaylistShuffled,
@@ -819,7 +837,33 @@ function App() {
     volume,
   });
 
+  const openLibraryGroup = (kind: "album" | "artist", key: string) => {
+    setActivePlaylistId(null);
+    setIsDiscoverView(false);
+    setLibraryView(kind === "album" ? "albums" : "artists");
+    setLibraryFilter({ kind, key });
+  };
+
   const shellValue: ShellContextValue = {
+    activeGroup,
+    albumGroups,
+    appLanguage,
+    artistGroups,
+    libraryFilter,
+    libraryView,
+    onCloseLibraryGroup: () => setLibraryFilter(null),
+    onOpenAlbum: (key) => openLibraryGroup("album", key),
+    onOpenArtist: (key) => openLibraryGroup("artist", key),
+    onOpenTrackAlbum: (track) => openLibraryGroup("album", getAlbumKey(track)),
+    onOpenTrackArtist: (track) => openLibraryGroup("artist", getArtistKey(track)),
+    onPlayLibraryIndices: (indices, shuffle) => {
+      setActivePlaylistId(null);
+      playLibraryIndices(indices, shuffle);
+    },
+    onSetLibraryView: (view) => {
+      setLibraryFilter(null);
+      setLibraryView(view);
+    },
     activeDownloadCount: downloadQueue.filter(
       (item) => item.status === "fetching" || item.status === "pending" || item.status === "downloading",
     ).length,

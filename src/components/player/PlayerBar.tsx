@@ -84,6 +84,7 @@ export function PlayerBar({
   const shell = useShell();
   const isLyricsOpen = shell.detailPanelOpen && shell.detailPanelTab === "lyrics";
   const isQueueOpen = shell.detailPanelOpen && shell.detailPanelTab === "queue";
+  const hasTrack = Boolean(selectedTrack.path || selectedTrack.source);
   const coverProgressPercent =
     activeDuration > 0
       ? (Math.min(displayedPlaybackTime, activeDuration) / activeDuration) * 100
@@ -111,8 +112,48 @@ export function PlayerBar({
           </div>
         </div>
         <div className="player-track-info">
-          <strong className="marquee-clip"><span className="marquee-text">{selectedTrack.title}</span></strong>
-          <p className="marquee-clip"><span className="marquee-text">{selectedTrack.artist} • {selectedTrack.album}</span></p>
+          {hasTrack ? (
+            <>
+              <strong className="marquee-clip">
+                <span className="marquee-text">
+                  <button
+                    className="player-link"
+                    onClick={() => shell.onOpenTrackAlbum(selectedTrack)}
+                    title={shell.copy.openAlbum}
+                    type="button"
+                  >
+                    {selectedTrack.title}
+                  </button>
+                </span>
+              </strong>
+              <p className="marquee-clip">
+                <span className="marquee-text">
+                  <button
+                    className="player-link"
+                    onClick={() => shell.onOpenTrackArtist(selectedTrack)}
+                    title={shell.copy.openArtist}
+                    type="button"
+                  >
+                    {selectedTrack.artist}
+                  </button>
+                  {" • "}
+                  <button
+                    className="player-link"
+                    onClick={() => shell.onOpenTrackAlbum(selectedTrack)}
+                    title={shell.copy.openAlbum}
+                    type="button"
+                  >
+                    {selectedTrack.album}
+                  </button>
+                </span>
+              </p>
+            </>
+          ) : (
+            <>
+              <strong className="marquee-clip"><span className="marquee-text">{selectedTrack.title}</span></strong>
+              <p className="marquee-clip"><span className="marquee-text">{selectedTrack.artist} • {selectedTrack.album}</span></p>
+            </>
+          )}
         </div>
       </div>
 

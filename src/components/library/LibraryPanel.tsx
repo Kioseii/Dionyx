@@ -1,6 +1,9 @@
 import { getTrackArtworkSrc } from "../../app/utils";
 import { memo, useRef, type MutableRefObject, type RefObject } from "react";
 import { Check, ChevronDown } from "lucide-react";
+import { useShell } from "../layout/ShellContext";
+import { LibraryGroupsGrid } from "./LibraryGroupsGrid";
+import { LibraryHeader } from "./LibraryHeader";
 import type { AppLanguage, LibrarySortKey, LibraryTrack, SavedPlaylist } from "../../app/types";
 
 type LibraryPanelCopy = {
@@ -117,20 +120,30 @@ export function LibraryPanel({
     onStopMarquee,
   };
 
+  const shell = useShell();
+  const showGroupsGrid = !activePlaylist && !shell.activeGroup && shell.libraryView !== "songs";
+  const showSortControl = !activePlaylist && !shell.activeGroup && shell.libraryView === "songs";
+  const visibleIndices = displayTrackRows.map(({ index }) => index);
+
   return (
     <article className="track-panel">
-      <div className="section-heading">
-        <div>
-          <p className="eyebrow">{copy.library}</p>
-          <h3>{activePlaylist ? activePlaylist.name : copy.mainList}</h3>
-        </div>
+      {activePlaylist ? null : <LibraryHeader visibleIndices={visibleIndices} />}
+      {activePlaylist || normalizedSearch || showSortControl ? (
+      <div className={`section-heading${activePlaylist ? "" : " section-heading--toolbar"}`}>
+        {activePlaylist ? (
+          <div>
+            <p className="eyebrow">{copy.library}</p>
+            <h3>{activePlaylist.name}</h3>
+          </div>
+        ) : (
+          <span className="muted library-filter-note">
+            {normalizedSearch ? `${copy.filteredBy}: ${searchQuery}` : ""}
+          </span>
+        )}
         {activePlaylist ? (
           normalizedSearch ? <span className="muted">{copy.filteredBy}: {searchQuery}</span> : null
-        ) : (
+        ) : !showSortControl ? null : (
           <div className="section-heading-actions">
-            {normalizedSearch ? (
-              <span className="muted">{copy.filteredBy}: {searchQuery}</span>
-            ) : null}
             <div
               className="sort-control"
               ref={librarySortMenuRef}
@@ -185,7 +198,17 @@ export function LibraryPanel({
           </div>
         )}
       </div>
+      ) : null}
 
+      {showGroupsGrid ? (
+        <div
+          className="track-table group-grid-scroll"
+          onMouseEnter={(e) => e.currentTarget.classList.add("scrollbar-visible")}
+          onMouseLeave={(e) => e.currentTarget.classList.remove("scrollbar-visible")}
+        >
+          <LibraryGroupsGrid kind={shell.libraryView === "albums" ? "album" : "artist"} normalizedSearch={normalizedSearch} />
+        </div>
+      ) : (
       <div
         className="track-table"
         onMouseEnter={(e) => e.currentTarget.classList.add("scrollbar-visible")}
@@ -232,6 +255,7 @@ export function LibraryPanel({
           </div>
         )}
       </div>
+      )}
     </article>
   );
 }
