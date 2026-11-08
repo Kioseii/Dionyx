@@ -785,7 +785,6 @@ function App() {
     isPlaying,
     isPlaylistModalOpen,
     librarySortMenuRef,
-    savedPlaylists,
     selectedEqualizerPresetId,
     selectedTrackArtist: selectedTrack.artist,
     selectedTrackTitle: selectedTrack.title,

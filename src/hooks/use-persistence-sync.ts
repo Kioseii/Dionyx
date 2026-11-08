@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import type { LibraryTrack, SavedPlaylist } from "../app/types";
+import type { LibraryTrack } from "../app/types";
 import { isTauriRuntime, removeStoredValue, writeStoredValue } from "../app/utils";
 import { legacyStorageKeys, storageKeys } from "../app/constants";
 
@@ -9,7 +9,6 @@ type UsePersistenceSyncOptions = {
   equalizerValues: number[];
   hideOnTray: boolean;
   isEqualizerEnabled: boolean;
-  savedPlaylists: SavedPlaylist[];
   selectedEqualizerPresetId: string;
   tracks: LibraryTrack[];
   volume: number;
@@ -20,7 +19,6 @@ export function usePersistenceSync({
   equalizerValues,
   hideOnTray,
   isEqualizerEnabled,
-  savedPlaylists,
   selectedEqualizerPresetId,
   tracks,
   volume,
@@ -47,10 +45,6 @@ export function usePersistenceSync({
       writeStoredValue(storageKeys.lastTrackPath, path);
     }
   }, [currentTrackIndex, tracks]);
-
-  useEffect(() => {
-    writeStoredValue(storageKeys.playlists, JSON.stringify(savedPlaylists));
-  }, [savedPlaylists]);
 
   useEffect(() => {
     writeStoredValue(storageKeys.equalizerEnabled, String(isEqualizerEnabled));

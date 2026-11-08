@@ -1,5 +1,5 @@
 import type { RefObject } from "react";
-import type { LibraryTrack, SavedPlaylist } from "../app/types";
+import type { LibraryTrack } from "../app/types";
 import { useAppShellEffects } from "./use-app-shell-effects";
 import { useDiscordPresence } from "./use-discord-presence";
 import { useOverlayControls } from "./use-overlay-controls";
@@ -19,7 +19,6 @@ type UseAppGlobalEffectsOptions = {
   isPlaying: boolean;
   isPlaylistModalOpen: boolean;
   librarySortMenuRef: RefObject<HTMLDivElement | null>;
-  savedPlaylists: SavedPlaylist[];
   selectedEqualizerPresetId: string;
   selectedTrackArtist: string;
   selectedTrackTitle: string;
@@ -46,7 +45,6 @@ export function useAppGlobalEffects({
   isPlaying,
   isPlaylistModalOpen,
   librarySortMenuRef,
-  savedPlaylists,
   selectedEqualizerPresetId,
   selectedTrackArtist,
   selectedTrackTitle,
@@ -63,7 +61,6 @@ export function useAppGlobalEffects({
     equalizerValues,
     hideOnTray,
     isEqualizerEnabled,
-    savedPlaylists,
     selectedEqualizerPresetId,
     tracks,
     volume,

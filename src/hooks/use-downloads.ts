@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { ask } from "@tauri-apps/plugin-dialog";
 import { useEffect, useRef, useState } from "react";
 import { storageKeys } from "../app/constants";
 import type {
@@ -64,16 +65,41 @@ export function useDownloads({
   const [toolingSupport, setToolingSupport] = useState<ToolingSupport>(defaultToolingSupport);
   const [hasLoadedToolingSupport, setHasLoadedToolingSupport] = useState(!isTauriRuntime());
   const [hasRequestedInitialToolsCheck, setHasRequestedInitialToolsCheck] = useState(toolsAlreadyConfirmed);
-  const [hasAttemptedAutoToolInstall, setHasAttemptedAutoToolInstall] = useState(false);
-  const [isAutoInstallingTools, setIsAutoInstallingTools] = useState(false);
+  const [hasShownMissingToolsHint, setHasShownMissingToolsHint] = useState(false);
   const [trackSearchResults, setTrackSearchResults] = useState<TrackSearchResult[] | null>(null);
   const [isSearchingTracks, setIsSearchingTracks] = useState(false);
   const downloadFormatMenuRef = useRef<HTMLDivElement | null>(null);
   const scannedPathRef = useRef<string | null>(scannedPath);
   const onBatchFinishedRef = useRef(onBatchFinished);
 
+  const hadActiveDownloadsRef = useRef(false);
+  const hasCompletedDownloadInBatchRef = useRef(false);
+
   scannedPathRef.current = scannedPath;
   onBatchFinishedRef.current = onBatchFinished;
+
+  // Rescan once per batch: when the queue goes from "something active" to
+  // "nothing active" and at least one download finished successfully. Derived
+  // from committed state, so it also fires when the last item of a batch fails.
+  useEffect(() => {
+    const hasActiveDownloads = downloadQueue.some(
+      (item) =>
+        item.status === "pending" ||
+        item.status === "downloading" ||
+        item.status === "fetching",
+    );
+
+    if (hadActiveDownloadsRef.current && !hasActiveDownloads && hasCompletedDownloadInBatchRef.current) {
+      hasCompletedDownloadInBatchRef.current = false;
+      const currentPath = scannedPathRef.current;
+
+      if (currentPath) {
+        void onBatchFinishedRef.current(currentPath);
+      }
+    }
+
+    hadActiveDownloadsRef.current = hasActiveDownloads;
+  }, [downloadQueue]);
 
   function openDownloadModal() {
     setIsDownloadModalOpen(true);
@@ -107,12 +133,7 @@ export function useDownloads({
       });
   }, []);
 
-  function recheckDeps() {
-    removeStoredValue(storageKeys.toolsReady);
-    setIsYtdlpAvailable(null);
-    setIsFfmpegAvailable(null);
-    setYtdlpVersion(null);
-    setFfmpegVersion(null);
+  function checkYtdlp() {
     invoke<string>("check_ytdlp")
       .then((version) => {
         setIsYtdlpAvailable(true);
@@ -121,6 +142,15 @@ export function useDownloads({
       .catch(() => {
         setIsYtdlpAvailable(false);
       });
+  }
+
+  function recheckDeps() {
+    removeStoredValue(storageKeys.toolsReady);
+    setIsYtdlpAvailable(null);
+    setIsFfmpegAvailable(null);
+    setYtdlpVersion(null);
+    setFfmpegVersion(null);
+    checkYtdlp();
     invoke<string>("check_ffmpeg")
       .then((version) => {
         setIsFfmpegAvailable(true);
@@ -149,7 +179,11 @@ export function useDownloads({
   }
 
   function startInstallYtdlp() {
-    void runInstallYtdlp();
+    // Verify the freshly installed binary actually runs (only yt-dlp, so a stale
+    // PATH does not flip an already-detected ffmpeg back to "missing").
+    void runInstallYtdlp()
+      .then(() => checkYtdlp())
+      .catch(() => {});
   }
 
   async function runInstallFfmpeg() {
@@ -163,58 +197,24 @@ export function useDownloads({
     });
   }
 
-  function startInstallFfmpeg() {
-    void runInstallFfmpeg();
-  }
-
-  async function autoInstallMissingTools() {
-    if (isAutoInstallingTools) {
-      return;
-    }
-
-    setHasAttemptedAutoToolInstall(true);
-    setIsAutoInstallingTools(true);
-    setStatusMessage(
-      appLanguage === "es"
-        ? "Instalando herramientas necesarias para descargas de audio..."
-        : "Installing the tools required for audio downloads...",
-    );
-
-    try {
-      if (isYtdlpAvailable === false && toolingSupport.supportsAutomaticYtdlpInstall) {
-        await runInstallYtdlp();
-      }
-
-      if (isFfmpegAvailable === false && toolingSupport.supportsAutomaticFfmpegInstall) {
-        await runInstallFfmpeg();
-      }
-
-      recheckDeps();
-      if (
-        (isYtdlpAvailable === false && !toolingSupport.supportsAutomaticYtdlpInstall) ||
-        (isFfmpegAvailable === false && !toolingSupport.supportsAutomaticFfmpegInstall)
-      ) {
-        setStatusMessage(
-          appLanguage === "es"
-            ? "Algunas herramientas requieren instalacion manual en esta plataforma. Revisa Descargas o Settings."
-            : "Some tools need manual setup on this platform. Check Downloads or Settings.",
-        );
-      } else {
-        setStatusMessage(
-          appLanguage === "es"
-            ? "yt-dlp y ffmpeg quedaron listos para descargar audio."
-            : "yt-dlp and ffmpeg are now ready for audio downloads.",
-        );
-      }
-    } catch {
-      setStatusMessage(
+  async function startInstallFfmpeg() {
+    if (toolingSupport.ffmpegInstallMethod === "winget" || toolingSupport.ffmpegInstallMethod === "homebrew") {
+      const manager = toolingSupport.ffmpegInstallMethod === "winget" ? "winget" : "Homebrew";
+      const confirmed = await ask(
         appLanguage === "es"
-          ? "No pude completar la instalacion automatica de herramientas. Puedes reintentarla desde Descargas o Settings."
-          : "I could not finish the automatic tool setup. You can retry it from Downloads or Settings.",
-      );
-    } finally {
-      setIsAutoInstallingTools(false);
+          ? `DIONYX instalara ffmpeg en tu sistema usando ${manager}${manager === "winget" ? " y aceptara los acuerdos del paquete Gyan.FFmpeg" : ""}. ¿Continuar?`
+          : `DIONYX will install ffmpeg on your system using ${manager}${manager === "winget" ? " and accept the Gyan.FFmpeg package agreements" : ""}. Continue?`,
+        { kind: "warning", title: "ffmpeg" },
+      ).catch(() => false);
+
+      if (!confirmed) {
+        return;
+      }
     }
+
+    // No recheck here: on Windows the running process keeps its old PATH, so a
+    // fresh check right after winget would wrongly report ffmpeg as missing.
+    await runInstallFfmpeg().catch(() => {});
   }
 
   useEffect(() => {
@@ -234,13 +234,10 @@ export function useDownloads({
     recheckDeps();
   }, [hasRequestedInitialToolsCheck]);
 
+  // Tools are never installed without an explicit click: on first launch we only
+  // tell the user what is missing and where to install it.
   useEffect(() => {
-    if (
-      !hasLoadedToolingSupport ||
-      !hasRequestedInitialToolsCheck ||
-      hasAttemptedAutoToolInstall ||
-      isAutoInstallingTools
-    ) {
+    if (!hasLoadedToolingSupport || !hasRequestedInitialToolsCheck || hasShownMissingToolsHint) {
       return;
     }
 
@@ -252,16 +249,19 @@ export function useDownloads({
       return;
     }
 
-    void autoInstallMissingTools();
+    setHasShownMissingToolsHint(true);
+    setStatusMessage(
+      appLanguage === "es"
+        ? "Faltan herramientas para descargar audio (yt-dlp o ffmpeg). Puedes instalarlas desde Descargas."
+        : "Some tools for audio downloads are missing (yt-dlp or ffmpeg). You can install them from Downloads.",
+    );
   }, [
     appLanguage,
     hasLoadedToolingSupport,
-    hasAttemptedAutoToolInstall,
     hasRequestedInitialToolsCheck,
-    isAutoInstallingTools,
+    hasShownMissingToolsHint,
     isFfmpegAvailable,
     isYtdlpAvailable,
-    toolingSupport,
   ]);
 
   useEffect(() => {
@@ -305,31 +305,14 @@ export function useDownloads({
     });
 
     const unlistenDone = listen<DonePayload>("download-done", (event) => {
-      let hasMoreActive = false;
-
-      setDownloadQueue((queue) => {
-        const updatedQueue = queue.map((item) =>
+      hasCompletedDownloadInBatchRef.current = true;
+      setDownloadQueue((queue) =>
+        queue.map((item) =>
           item.id === event.payload.downloadId
             ? { ...item, status: "done" as DownloadStatus, progress: 100 }
             : item,
-        );
-
-        hasMoreActive = updatedQueue.some(
-          (item) =>
-            item.status === "pending" ||
-            item.status === "downloading" ||
-            item.status === "fetching",
-        );
-
-        return updatedQueue;
-      });
-
-      if (!hasMoreActive) {
-        const currentPath = scannedPathRef.current;
-        if (currentPath) {
-          void onBatchFinishedRef.current(currentPath);
-        }
-      }
+        ),
+      );
     });
 
     const unlistenFailed = listen<FailedPayload>("download-failed", (event) => {

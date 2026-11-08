@@ -57,9 +57,19 @@ fn discord_connect() -> Option<DiscordPipe> {
                 })
                 .to_string();
                 if discord_write(&mut f, 0, &hs).is_ok() {
-                    // Read handshake response (ignore content)
-                    let _ = discord_read(&mut f);
-                    return Some(DiscordPipe(f));
+                    // Wait briefly for the READY response without ever blocking
+                    // indefinitely: a client that never answers must not hang
+                    // the command (and the mutex) forever.
+                    for _ in 0..20 {
+                        match discord_bytes_available(&f) {
+                            None => break,
+                            Some(0) => std::thread::sleep(Duration::from_millis(100)),
+                            Some(_) => break,
+                        }
+                    }
+                    if discord_drain(&mut f).is_ok() {
+                        return Some(DiscordPipe(f));
+                    }
                 }
             }
         }
@@ -89,8 +99,78 @@ fn discord_read(f: &mut std::fs::File) -> std::io::Result<String> {
     Ok(String::from_utf8_lossy(&buf).into_owned())
 }
 
+/// Number of bytes waiting in the named pipe, or `None` if the pipe is broken.
+/// Uses `PeekNamedPipe`, which never blocks.
+#[cfg(target_os = "windows")]
+fn discord_bytes_available(f: &std::fs::File) -> Option<u32> {
+    use std::os::windows::io::AsRawHandle;
+
+    #[link(name = "kernel32")]
+    extern "system" {
+        fn PeekNamedPipe(
+            pipe: *mut std::ffi::c_void,
+            buffer: *mut std::ffi::c_void,
+            buffer_size: u32,
+            bytes_read: *mut u32,
+            total_bytes_avail: *mut u32,
+            bytes_left_this_message: *mut u32,
+        ) -> i32;
+    }
+
+    let mut available: u32 = 0;
+    // SAFETY: the handle comes from a live `File`; all out-pointers are either
+    // null (allowed by the API) or point to a valid local.
+    let ok = unsafe {
+        PeekNamedPipe(
+            f.as_raw_handle(),
+            std::ptr::null_mut(),
+            0,
+            std::ptr::null_mut(),
+            &mut available,
+            std::ptr::null_mut(),
+        )
+    };
+
+    if ok == 0 {
+        None
+    } else {
+        Some(available)
+    }
+}
+
+/// Consumes every response frame Discord already wrote, so the pipe buffer never
+/// fills up. Returns an error if the pipe is closed (caller reconnects).
+#[cfg(target_os = "windows")]
+fn discord_drain(f: &mut std::fs::File) -> std::io::Result<()> {
+    loop {
+        match discord_bytes_available(f) {
+            None => {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::BrokenPipe,
+                    "discord pipe closed",
+                ))
+            }
+            Some(available) if available >= 8 => {
+                discord_read(f)?;
+            }
+            Some(_) => return Ok(()),
+        }
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn lock_discord(state: &DiscordState) -> std::sync::MutexGuard<'_, Option<DiscordPipe>> {
+    // A panic while holding the lock must not disable Rich Presence for the rest
+    // of the session.
+    state.0.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
 #[cfg(target_os = "windows")]
 fn discord_set_activity_legacy(pipe: &mut DiscordPipe, payload: serde_json::Value) -> bool {
+    if discord_drain(&mut pipe.0).is_err() {
+        return false;
+    }
+
     let msg = serde_json::json!({
         "cmd": "SET_ACTIVITY",
         "args": {
@@ -121,18 +201,46 @@ fn uuid_v4() -> String {
     )
 }
 
+// Discord IPC is blocking pipe I/O: run it on the blocking pool, never on the
+// main thread (sync Tauri commands run on the main thread and freeze the UI).
 #[tauri::command]
 #[cfg(target_os = "windows")]
-fn update_discord_presence(
+async fn update_discord_presence(
+    app: tauri::AppHandle,
     title: String,
     artist: String,
     cover_url: Option<String>,
     elapsed_secs: f64,
     duration_secs: f64,
     is_playing: bool,
-    state: tauri::State<DiscordState>,
+) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<DiscordState>();
+        update_discord_presence_blocking(
+            &state,
+            title,
+            artist,
+            cover_url,
+            elapsed_secs,
+            duration_secs,
+            is_playing,
+        );
+    })
+    .await
+    .map_err(|e| e.to_string())
+}
+
+#[cfg(target_os = "windows")]
+fn update_discord_presence_blocking(
+    state: &DiscordState,
+    title: String,
+    artist: String,
+    cover_url: Option<String>,
+    elapsed_secs: f64,
+    duration_secs: f64,
+    is_playing: bool,
 ) {
-    let mut guard = state.0.lock().unwrap();
+    let mut guard = lock_discord(state);
 
     if guard.is_none() {
         *guard = discord_connect();
@@ -193,20 +301,31 @@ fn update_discord_presence(
 
 #[tauri::command]
 #[cfg(target_os = "windows")]
-fn clear_discord_presence(state: tauri::State<DiscordState>) {
-    let mut guard = state.0.lock().unwrap();
-    if let Some(pipe) = guard.as_mut() {
-        let msg = serde_json::json!({
-            "cmd": "SET_ACTIVITY",
-            "args": {
-                "pid": std::process::id(),
-                "activity": serde_json::Value::Null
-            },
-            "nonce": uuid_v4()
-        })
-        .to_string();
-        let _ = discord_write(&mut pipe.0, 1, &msg);
-    }
+async fn clear_discord_presence(app: tauri::AppHandle) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<DiscordState>();
+        let mut guard = lock_discord(&state);
+        if let Some(pipe) = guard.as_mut() {
+            if discord_drain(&mut pipe.0).is_err() {
+                *guard = None;
+                return;
+            }
+            let msg = serde_json::json!({
+                "cmd": "SET_ACTIVITY",
+                "args": {
+                    "pid": std::process::id(),
+                    "activity": serde_json::Value::Null
+                },
+                "nonce": uuid_v4()
+            })
+            .to_string();
+            if discord_write(&mut pipe.0, 1, &msg).is_err() {
+                *guard = None;
+            }
+        }
+    })
+    .await
+    .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -461,7 +580,21 @@ fn format_duration(duration: Duration) -> String {
 /// Writes title, artist, album (and optionally a new cover image) to an audio file.
 /// `artwork_b64` is a base64-encoded JPEG or PNG; `artwork_mime` is its MIME type.
 #[tauri::command]
-fn save_track_metadata(
+async fn save_track_metadata(
+    path: String,
+    title: String,
+    artist: String,
+    album: String,
+    artwork_b64: Option<String>,
+    artwork_mime: Option<String>,
+) -> Result<(), String> {
+    run_blocking(move || {
+        save_track_metadata_blocking(path, title, artist, album, artwork_b64, artwork_mime)
+    })
+    .await
+}
+
+fn save_track_metadata_blocking(
     path: String,
     title: String,
     artist: String,
@@ -551,20 +684,41 @@ struct DownloadFailed {
 
 /// Permanently deletes an audio file from disk.
 #[tauri::command]
-fn delete_track_file(path: String) -> Result<(), String> {
-    let file_path = std::path::PathBuf::from(&path);
+async fn delete_track_file(path: String) -> Result<(), String> {
+    run_blocking(move || {
+        let file_path = std::path::PathBuf::from(&path);
 
-    if !file_path.exists() {
-        return Err("El archivo no existe en el disco.".into());
-    }
+        if !file_path.exists() {
+            return Err("El archivo no existe en el disco.".into());
+        }
 
-    std::fs::remove_file(&file_path).map_err(|e| format!("No se pudo eliminar el archivo: {e}"))
+        std::fs::remove_file(&file_path)
+            .map_err(|e| format!("No se pudo eliminar el archivo: {e}"))
+    })
+    .await
+}
+
+/// Runs blocking work (file I/O, child processes) on Tauri's blocking pool so
+/// it never stalls the main thread or an async worker.
+async fn run_blocking<T, F>(work: F) -> Result<T, String>
+where
+    F: FnOnce() -> Result<T, String> + Send + 'static,
+    T: Send + 'static,
+{
+    tauri::async_runtime::spawn_blocking(work)
+        .await
+        .map_err(|e| format!("La tarea en segundo plano falló: {e}"))?
 }
 
 /// Returns `Ok(version)` if yt-dlp is in PATH, or an error string.
 #[tauri::command]
-fn check_ytdlp(app: tauri::AppHandle) -> Result<String, String> {
-    let mut cmd = std::process::Command::new(ytdlp_exe(&app));
+async fn check_ytdlp(app: tauri::AppHandle) -> Result<String, String> {
+    let exe = ytdlp_exe(&app);
+    run_blocking(move || check_ytdlp_blocking(&exe)).await
+}
+
+fn check_ytdlp_blocking(exe: &Path) -> Result<String, String> {
+    let mut cmd = std::process::Command::new(exe);
     cmd.arg("--version");
     #[cfg(target_os = "windows")]
     cmd.creation_flags(CREATE_NO_WINDOW);
@@ -580,7 +734,11 @@ fn check_ytdlp(app: tauri::AppHandle) -> Result<String, String> {
 }
 
 #[tauri::command]
-fn check_ffmpeg() -> Result<String, String> {
+async fn check_ffmpeg() -> Result<String, String> {
+    run_blocking(check_ffmpeg_blocking).await
+}
+
+fn check_ffmpeg_blocking() -> Result<String, String> {
     let mut cmd = std::process::Command::new("ffmpeg");
     cmd.arg("-version");
     #[cfg(target_os = "windows")]
@@ -627,21 +785,37 @@ fn managed_ytdlp_filename() -> &'static str {
     }
 }
 
-fn managed_ytdlp_download_url() -> &'static str {
+/// Official stable release channel. Every release publishes `SHA2-256SUMS`.
+const YTDLP_RELEASE_BASE_URL: &str = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/";
+
+/// Asset name of the standalone yt-dlp build for this platform.
+fn managed_ytdlp_asset_name() -> &'static str {
     #[cfg(target_os = "windows")]
     {
-        "https://github.com/yt-dlp/yt-dlp-nightly-builds/releases/latest/download/yt-dlp.exe"
+        "yt-dlp.exe"
     }
 
     #[cfg(target_os = "macos")]
     {
-        "https://github.com/yt-dlp/yt-dlp-nightly-builds/releases/latest/download/yt-dlp_macos"
+        "yt-dlp_macos"
     }
 
     #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
     {
-        "https://github.com/yt-dlp/yt-dlp-nightly-builds/releases/latest/download/yt-dlp"
+        "yt-dlp"
     }
+}
+
+/// Finds the lowercase SHA-256 for `asset` in a `SHA2-256SUMS` file
+/// (`<hash>  <name>` per line, optional `*` binary marker).
+fn expected_sha256(sums: &str, asset: &str) -> Option<String> {
+    sums.lines().find_map(|line| {
+        let mut parts = line.split_whitespace();
+        let hash = parts.next()?;
+        let name = parts.next()?.trim_start_matches('*');
+        (name == asset && hash.len() == 64 && hash.chars().all(|c| c.is_ascii_hexdigit()))
+            .then(|| hash.to_ascii_lowercase())
+    })
 }
 
 fn append_platform_specific_ytdlp_args(args: &mut Vec<String>) {
@@ -739,55 +913,108 @@ fn get_tooling_support() -> ToolingSupport {
 }
 
 /// Downloads the platform-specific yt-dlp binary into the DIONYX tools dir.
+///
+/// The binary is streamed to a `.part` file, verified against the release's
+/// published SHA-256 and only then moved over the previous binary, so an
+/// interrupted or tampered download never replaces a working yt-dlp.
 #[tauri::command]
 async fn install_ytdlp(app: tauri::AppHandle) -> Result<(), String> {
+    use futures_util::StreamExt as _;
+    use sha2::{Digest, Sha256};
+    use std::io::Write as _;
     use tauri::Emitter as _;
 
     let dir = tools_dir(&app);
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
 
-    let url = managed_ytdlp_download_url();
+    let asset = managed_ytdlp_asset_name();
     let dest = dir.join(managed_ytdlp_filename());
+    let partial = dir.join(format!("{}.part", managed_ytdlp_filename()));
 
-    let resp = reqwest::get(url).await.map_err(|e| e.to_string())?;
+    let client = reqwest::Client::builder()
+        .user_agent("DIONYX")
+        .connect_timeout(Duration::from_secs(15))
+        .timeout(Duration::from_secs(600))
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let sums = client
+        .get(format!("{YTDLP_RELEASE_BASE_URL}SHA2-256SUMS"))
+        .send()
+        .await
+        .and_then(|r| r.error_for_status())
+        .map_err(|e| format!("No pude obtener las sumas de verificación de yt-dlp: {e}"))?
+        .text()
+        .await
+        .map_err(|e| e.to_string())?;
+    let expected = expected_sha256(&sums, asset)
+        .ok_or_else(|| format!("La release de yt-dlp no publica una suma para {asset}."))?;
+
+    let resp = client
+        .get(format!("{YTDLP_RELEASE_BASE_URL}{asset}"))
+        .send()
+        .await
+        .and_then(|r| r.error_for_status())
+        .map_err(|e| format!("No pude descargar yt-dlp: {e}"))?;
     let total = resp.content_length().unwrap_or(0);
     let mut stream = resp.bytes_stream();
 
-    use futures_util::StreamExt as _;
-    use std::io::Write as _;
+    let result: Result<(), String> = async {
+        let mut file = std::fs::File::create(&partial).map_err(|e| e.to_string())?;
+        let mut hasher = Sha256::new();
+        let mut downloaded: u64 = 0;
+        let mut last_pct: u8 = 0;
 
-    let mut file = std::fs::File::create(&dest).map_err(|e| e.to_string())?;
-    let mut downloaded: u64 = 0;
-    let mut last_pct: u8 = 0;
-
-    while let Some(chunk) = stream.next().await {
-        let chunk = chunk.map_err(|e| e.to_string())?;
-        file.write_all(&chunk).map_err(|e| e.to_string())?;
-        downloaded += chunk.len() as u64;
-        if total > 0 {
-            let pct = ((downloaded * 100) / total) as u8;
-            if pct != last_pct {
-                last_pct = pct;
-                let _ = app.emit(
-                    "tool-progress",
-                    ToolProgress {
-                        tool: "ytdlp".into(),
-                        percent: pct,
-                    },
-                );
+        while let Some(chunk) = stream.next().await {
+            let chunk = chunk.map_err(|e| format!("La descarga de yt-dlp se interrumpió: {e}"))?;
+            file.write_all(&chunk).map_err(|e| e.to_string())?;
+            hasher.update(&chunk);
+            downloaded += chunk.len() as u64;
+            if total > 0 {
+                let pct = ((downloaded * 100) / total).min(100) as u8;
+                if pct != last_pct {
+                    last_pct = pct;
+                    let _ = app.emit(
+                        "tool-progress",
+                        ToolProgress {
+                            tool: "ytdlp".into(),
+                            percent: pct,
+                        },
+                    );
+                }
             }
         }
-    }
 
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let mut permissions = std::fs::metadata(&dest)
-            .map_err(|e| e.to_string())?
-            .permissions();
-        permissions.set_mode(0o755);
-        std::fs::set_permissions(&dest, permissions).map_err(|e| e.to_string())?;
+        file.sync_all().map_err(|e| e.to_string())?;
+        drop(file);
+
+        let actual = format!("{:x}", hasher.finalize());
+        if actual != expected {
+            return Err(
+                "La verificación SHA-256 de yt-dlp falló; no se instaló el archivo descargado."
+                    .into(),
+            );
+        }
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mut permissions = std::fs::metadata(&partial)
+                .map_err(|e| e.to_string())?
+                .permissions();
+            permissions.set_mode(0o755);
+            std::fs::set_permissions(&partial, permissions).map_err(|e| e.to_string())?;
+        }
+
+        std::fs::rename(&partial, &dest)
+            .map_err(|e| format!("No pude reemplazar yt-dlp (¿está en uso?): {e}"))
     }
+    .await;
+
+    if result.is_err() {
+        let _ = std::fs::remove_file(&partial);
+    }
+    result?;
 
     let _ = app.emit(
         "tool-done",
@@ -943,9 +1170,11 @@ async fn search_tracks(
     cmd.args(&args);
     #[cfg(target_os = "windows")]
     cmd.creation_flags(CREATE_NO_WINDOW);
-    let output = cmd
-        .output()
-        .map_err(|e| format!("No se pudo ejecutar yt-dlp: {e}"))?;
+    let output = run_blocking(move || {
+        cmd.output()
+            .map_err(|e| format!("No se pudo ejecutar yt-dlp: {e}"))
+    })
+    .await?;
 
     if !output.status.success() {
         return Err("La búsqueda no devolvió resultados.".to_string());
@@ -1079,8 +1308,12 @@ fn resolve_to_ytmusic_url(input: &str, ytdlp: &Path) -> String {
 #[tauri::command]
 async fn get_video_info(url: String, app: tauri::AppHandle) -> Result<String, String> {
     let exe = ytdlp_exe(&app);
-    let resolved = resolve_to_ytmusic_url(&url, &exe);
-    let mut info_cmd = std::process::Command::new(&exe);
+    run_blocking(move || get_video_info_blocking(&url, &exe)).await
+}
+
+fn get_video_info_blocking(url: &str, exe: &Path) -> Result<String, String> {
+    let resolved = resolve_to_ytmusic_url(url, exe);
+    let mut info_cmd = std::process::Command::new(exe);
     let mut info_args = vec![
         "--get-title".to_string(),
         "--no-playlist".to_string(),
@@ -1128,10 +1361,12 @@ fn download_audio(
 ) -> Result<(), String> {
     // Resolve text queries → YouTube Music URL for better metadata/artwork
     let exe = ytdlp_exe(&app);
-    let resolved_url = resolve_to_ytmusic_url(&url, &exe);
     std::thread::spawn(move || {
         use std::io::BufRead as _;
         use tauri::Emitter as _;
+
+        // Text queries run a yt-dlp search; do it here, off the main thread.
+        let resolved_url = resolve_to_ytmusic_url(&url, &exe);
 
         // Use the video ID (always ASCII) as the temp filename during download.
         // This avoids OSError [Errno 22] on Windows with Unicode/Japanese titles.
@@ -1382,14 +1617,15 @@ fn convert_audio(src: &Path, format: &str, meta: TrackMeta) -> bool {
     if src_ext == target_ext {
         // Embed the thumbnail if present, then rename.
         embed_thumbnail_inplace(src);
-        let dst = src.with_file_name(format!("{stem}.{target_ext}"));
+        let dst = unique_destination(&src.with_file_name(format!("{stem}.{target_ext}")), src);
         if dst != src {
             let _ = std::fs::rename(src, &dst);
         }
         return true;
     }
 
-    let dst = src.with_file_name(format!("{stem}.{target_ext}"));
+    // Never overwrite an existing library file that happens to share the title.
+    let dst = unique_destination(&src.with_file_name(format!("{stem}.{target_ext}")), src);
     let src_str = src.to_str().unwrap_or("");
     let dst_str = dst.to_str().unwrap_or("");
 
@@ -1509,6 +1745,38 @@ fn convert_audio(src: &Path, format: &str, meta: TrackMeta) -> bool {
     }
 
     false
+}
+
+/// Returns `candidate` if it is free (or is `src` itself); otherwise the first
+/// free "Name (2).ext", "Name (3).ext", ... in the same folder.
+fn unique_destination(candidate: &Path, src: &Path) -> PathBuf {
+    if candidate == src || !candidate.exists() {
+        return candidate.to_path_buf();
+    }
+
+    let stem = candidate
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("track")
+        .to_string();
+    let ext = candidate
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| format!(".{e}"))
+        .unwrap_or_default();
+
+    for n in 2..10_000 {
+        let next = candidate.with_file_name(format!("{stem} ({n}){ext}"));
+        if !next.exists() {
+            return next;
+        }
+    }
+
+    let millis = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis();
+    candidate.with_file_name(format!("{stem} ({millis}){ext}"))
 }
 
 /// For cases where the native format already matches the target, embed the
@@ -1686,4 +1954,50 @@ pub fn run() {
         })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn expected_sha256_finds_asset_line() {
+        let hash = "a".repeat(64);
+        let sums = format!(
+            "{}  yt-dlp\n{}  yt-dlp.exe\n{} *yt-dlp_macos\n",
+            "b".repeat(64),
+            hash,
+            "C".repeat(64)
+        );
+        assert_eq!(expected_sha256(&sums, "yt-dlp.exe"), Some(hash));
+        assert_eq!(expected_sha256(&sums, "yt-dlp_macos"), Some("c".repeat(64)));
+        assert_eq!(expected_sha256(&sums, "yt-dlp_linux"), None);
+    }
+
+    #[test]
+    fn expected_sha256_rejects_malformed_hash() {
+        assert_eq!(expected_sha256("xyz  yt-dlp.exe", "yt-dlp.exe"), None);
+    }
+
+    #[test]
+    fn unique_destination_avoids_existing_files() {
+        let dir = std::env::temp_dir().join(format!("dionyx-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+
+        let src = dir.join("abc123.m4a");
+        let wanted = dir.join("Intro.mp3");
+        assert_eq!(unique_destination(&wanted, &src), wanted);
+
+        std::fs::write(&wanted, b"existing").unwrap();
+        assert_eq!(unique_destination(&wanted, &src), dir.join("Intro (2).mp3"));
+
+        std::fs::write(dir.join("Intro (2).mp3"), b"existing").unwrap();
+        assert_eq!(unique_destination(&wanted, &src), dir.join("Intro (3).mp3"));
+
+        // A file never conflicts with itself.
+        assert_eq!(unique_destination(&wanted, &wanted), wanted);
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }

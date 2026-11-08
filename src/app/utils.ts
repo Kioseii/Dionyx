@@ -45,16 +45,33 @@ export function readStoredValue(key: string) {
   }
 }
 
-export function writeStoredValue(key: string, value: string) {
+/** Returns false when the value could not be stored (e.g. quota exceeded). */
+export function writeStoredValue(key: string, value: string): boolean {
   if (typeof window === "undefined") {
-    return;
+    return false;
   }
 
   try {
     window.localStorage.setItem(key, value);
+    return true;
   } catch {
-    // Ignore storage issues and keep the app usable.
+    // Keep the app usable; callers that care can react to the false result.
+    return false;
   }
+}
+
+/**
+ * Serializes playlists without heavy or session-only fields: embedded artwork
+ * (base64 data URLs can be hundreds of KB per track) and blob: sources from the
+ * browser picker, which are dead after a restart.
+ */
+export function serializePlaylistsForStorage(playlists: SavedPlaylist[]) {
+  return JSON.stringify(
+    playlists.map((playlist) => ({
+      ...playlist,
+      tracks: playlist.tracks.map(({ artworkDataUrl: _artwork, source: _source, ...track }) => track),
+    })),
+  );
 }
 
 export function removeStoredValue(key: string) {
