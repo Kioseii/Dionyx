@@ -271,6 +271,24 @@ mod tests {
         );
     }
 
+    /// Real call to Last.fm with the compiled-in key and secret (needs
+    /// network and .lastfm.env): `cargo test -- --ignored lastfm_live`.
+    #[test]
+    #[ignore]
+    fn lastfm_live_credentials_are_accepted() {
+        if credentials().is_err() {
+            panic!("no Last.fm credentials compiled in (src-tauri/.lastfm.env)");
+        }
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        let body = runtime
+            .block_on(call("auth.getToken", BTreeMap::new(), false))
+            .expect("Last.fm rejected the signed request");
+        assert!(body.get("token").and_then(|value| value.as_str()).is_some());
+    }
+
     #[test]
     fn signature_sorts_params_and_skips_format() {
         let mut params = BTreeMap::new();
