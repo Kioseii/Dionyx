@@ -7,7 +7,10 @@
 .shell-page-root {
   display: flex;
   flex-direction: column;
-  min-height: 0;
+  /* Grow with the page instead of shrinking to the window: a shrunk box let
+     the content overflow past .main-stage's bottom padding, so the end of
+     long pages stayed hidden under the player bar. */
+  flex-shrink: 0;
 }
 
 .app-page {
