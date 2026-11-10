@@ -6,7 +6,7 @@
 
 **A local music player for your desktop: your files, your colors, your sound.**
 
-[![Version](https://img.shields.io/badge/version-1.4.1-8b5cf6)](CONTEXT.md)
+[![Version](https://img.shields.io/badge/version-1.5.0-8b5cf6)](CONTEXT.md)
 [![Tauri 2](https://img.shields.io/badge/Tauri-2-24c8db?logo=tauri&logoColor=white)](https://tauri.app)
 [![React 19](https://img.shields.io/badge/React-19-61dafb?logo=react&logoColor=black)](https://react.dev)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178c6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
@@ -29,20 +29,24 @@ DIONYX plays the music you already have on your computer. It reads your folders,
 ### 🎧 Playback
 - Plays **MP3, FLAC, WAV, AIFF, ALAC/M4A, AAC, OGG and Opus**.
 - **Gapless playback** and an optional **crossfade** (0–10 s).
-- **10-band equalizer** with presets.
+- **10-band equalizer** with presets, and **volume normalization** from ReplayGain tags (by song or by album).
 - Queue, shuffle, repeat, playback speed and a **sleep timer** (minutes or "end of song", with a soft fade-out).
 - **Picks up where you left off**: same song, same second.
-- **Keyboard shortcuts** for everything you use often (Space, arrows, M, L, F...).
+- **Keyboard shortcuts** for everything you use often (Space, arrows, M, L, H, F...).
+- Drag to **reorder "Up next"**.
 
 ### 📚 Library
 - Albums, artists and songs views, search and sorting.
 - Covers and tags read from your files; **edit metadata** from the app.
-- Manual playlists, with "select all" when building them.
+- Manual playlists, with "select all" when building them, plus **M3U import and export** (take them to your phone).
+- **❤ Favorites** as an automatic playlist.
+- **Watches your music folder**: new downloads or deleted files show up on their own.
+- **Duplicate finder** that keeps the best copy and moves the rest to the Recycle Bin.
 
 ### 🎤 Lyrics & Now Playing
-- **Synced lyrics** (via LRCLIB): click any line to jump there.
+- **Synced lyrics** (via LRCLIB or a `.lrc` next to the song): click any line to jump there. Saved for **offline** use.
 - **Romanization** for Japanese lyrics.
-- Full-screen **Now Playing**, a compact **mini player** and a tray icon.
+- Full-screen **Now Playing**, a compact **mini player** (with adjustable see-through background) and a tray icon.
 
 ### 🎨 Make it yours
 - Pick **any accent color**, or let it **follow the album cover**.
@@ -53,12 +57,18 @@ DIONYX plays the music you already have on your computer. It reads your folders,
 - **Similar artists** to the ones in your library.
 - **Charts from your own taste**: your genres are worked out from what you listen to (Last.fm) or what you own (library), 30 songs per page, plus the global chart.
 - 30-second **previews** and one-click **downloads** (yt-dlp + ffmpeg, installed from the app).
-- **Last.fm scrobbling** with your own account, including an offline queue.
+- **Last.fm scrobbling** with your own account, including an offline queue; ❤ Favorites sync with your **Loved Tracks**.
 - **Discord Rich Presence** (Windows).
+
+### 📊 Your listening
+- **Statistics**: minutes, plays, streaks, top artists and songs, when you listen, and **"Your year in music"**.
+- Home shows **recently played** and **most played** songs.
 
 ## Download
 
-Prebuilt installers are not published yet. You can build DIONYX yourself in a few minutes (see below).
+Get the latest **`DIONYX_x.y.z_x64-setup.exe`** (Windows) from the [Releases](../../releases/latest) page. It installs for your user, no admin rights needed, and **updates itself** when a new version comes out.
+
+You can also build DIONYX yourself (see below).
 
 ## Build from source
 
