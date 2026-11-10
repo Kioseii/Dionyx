@@ -123,6 +123,24 @@ export function HomePage() {
         </section>
       ) : null}
 
+
+      {shell.recentlyPlayed.length > 0 ? (
+        <HomeSongList
+          id="home-recently-played"
+          indices={shell.recentlyPlayed}
+          title={copy.homeRecentlyPlayed}
+        />
+      ) : null}
+
+      {shell.mostPlayed.length > 0 ? (
+        <HomeSongList
+          counts={shell.mostPlayed.map((item) => item.count)}
+          id="home-most-played"
+          indices={shell.mostPlayed.map((item) => item.index)}
+          title={copy.homeMostPlayed}
+        />
+      ) : null}
+
       <section aria-labelledby="home-playlists" className="home-section">
         <div className="home-section-heading">
           <h2 className="home-section-title" id="home-playlists">{copy.yourPlaylists}</h2>
@@ -182,5 +200,50 @@ export function HomePage() {
         </div>
       </section>
     </div>
+  );
+}
+
+/** Compact list of songs (recently / most played); a click plays from that song on. */
+function HomeSongList({ counts, id, indices, title }: { counts?: number[]; id: string; indices: number[]; title: string }) {
+  const shell = useShell();
+
+  return (
+    <section aria-labelledby={id} className="home-section">
+      <div className="home-section-heading">
+        <h2 className="home-section-title" id={id}>{title}</h2>
+      </div>
+      <div className="home-song-list">
+        {indices.map((libraryIndex, position) => {
+          const track = shell.libraryTracks[libraryIndex];
+          if (!track) return null;
+          const cover = getTrackArtworkSrc(track);
+          return (
+            <button
+              className="home-song"
+              key={`${libraryIndex}-${position}`}
+              onClick={() => shell.onPlayLibraryIndices(indices.slice(position))}
+              type="button"
+            >
+              {cover ? (
+                <img alt="" className="home-song-cover" loading="lazy" src={cover} />
+              ) : (
+                <span className="home-song-cover home-song-cover--empty">
+                  <Disc3 aria-hidden="true" size={18} strokeWidth={1.8} />
+                </span>
+              )}
+              <span className="home-song-text">
+                <strong>{track.title}</strong>
+                <span className="muted">{track.artist}</span>
+              </span>
+              {counts ? (
+                <span className="home-song-count">
+                  {counts[position]} {counts[position] === 1 ? shell.copy.homePlay : shell.copy.homePlays}
+                </span>
+              ) : null}
+            </button>
+          );
+        })}
+      </div>
+    </section>
   );
 }

@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { ChevronLeft, Disc3, Play, Shuffle, UserRound } from "lucide-react";
+import { ChevronLeft, Disc3, Heart, Play, Shuffle, UserRound } from "lucide-react";
 import { countLabel, formatTotalDuration } from "../../app/library-groups";
 import { getTrackArtworkSrc } from "../../app/utils";
 import type { LibraryView } from "../../hooks/use-library-browse";
@@ -22,9 +22,10 @@ export function LibraryHeader({ tabsAside, visibleIndices }: LibraryHeaderProps)
 
   if (activeGroup && shell.libraryFilter) {
     const isAlbum = shell.libraryFilter.kind === "album";
+    const isFavorites = shell.libraryFilter.kind === "favorites";
     const coverSrc = activeGroup.coverTrack ? getTrackArtworkSrc(activeGroup.coverTrack) : null;
     const meta = [
-      isAlbum ? activeGroup.artistName : countLabel(activeGroup.albumCount, copy.albumCountSingular, copy.albumsCountLabel),
+      isFavorites ? null : isAlbum ? activeGroup.artistName : countLabel(activeGroup.albumCount, copy.albumCountSingular, copy.albumsCountLabel),
       countLabel(activeGroup.indices.length, copy.trackCountSingular, copy.tracksCountLabel),
       activeGroup.totalSeconds > 0 ? formatTotalDuration(activeGroup.totalSeconds, shell.appLanguage) : null,
     ].filter(Boolean);
@@ -33,11 +34,13 @@ export function LibraryHeader({ tabsAside, visibleIndices }: LibraryHeaderProps)
       <div className="library-header library-header--group">
         <button className="library-back-button" onClick={shell.onCloseLibraryGroup} type="button">
           <ChevronLeft aria-hidden="true" size={16} strokeWidth={2.2} />
-          {isAlbum ? copy.backToAlbums : copy.backToArtists}
+          {isFavorites ? copy.backToLibrary : isAlbum ? copy.backToAlbums : copy.backToArtists}
         </button>
         <div className="group-hero">
-          <div className={`group-hero-cover${isAlbum ? "" : " group-hero-cover--round"}`}>
-            {coverSrc ? (
+          <div className={`group-hero-cover${isAlbum || isFavorites ? "" : " group-hero-cover--round"}${isFavorites ? " group-hero-cover--favorites" : ""}`}>
+            {isFavorites ? (
+              <Heart aria-hidden="true" className="group-card-placeholder" fill="currentColor" size={52} strokeWidth={1.6} />
+            ) : coverSrc ? (
               <img alt="" className="group-card-image" src={coverSrc} />
             ) : isAlbum ? (
               <Disc3 aria-hidden="true" className="group-card-placeholder" size={44} strokeWidth={1.6} />
@@ -46,7 +49,7 @@ export function LibraryHeader({ tabsAside, visibleIndices }: LibraryHeaderProps)
             )}
           </div>
           <div className="group-hero-copy">
-            <p className="eyebrow">{isAlbum ? copy.albumKind : copy.artistKind}</p>
+            <p className="eyebrow">{isFavorites ? copy.favoritesKind : isAlbum ? copy.albumKind : copy.artistKind}</p>
             <h2 className="library-title">{activeGroup.name}</h2>
             <p className="library-stats">{meta.join(" · ")}</p>
             <PlayButtons indices={visibleIndices} />

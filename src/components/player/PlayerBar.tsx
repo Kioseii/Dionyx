@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { useShell } from "../layout/ShellContext";
 import { SleepTimerButton } from "./SleepTimerButton";
+import { HeartButton } from "../library/HeartButton";
 import type { AppLanguage, LibraryTrack, RepeatMode } from "../../app/types";
 import { formatTime } from "../../app/utils";
 
@@ -165,6 +166,15 @@ export function PlayerBar({
             </>
           )}
         </div>
+        {hasTrack ? (
+          <HeartButton
+            artist={selectedTrack.artist}
+            className="player-heart"
+            labels={{ add: shell.copy.favoriteAdd, remove: shell.copy.favoriteRemove }}
+            size={17}
+            title={selectedTrack.title}
+          />
+        ) : null}
       </div>
 
       <div className="player-center">

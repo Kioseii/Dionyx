@@ -1,4 +1,4 @@
-import { Compass, Download, FolderOpen, House, ListMusic, Palette, Plus, RefreshCw, Settings } from "lucide-react";
+import { Compass, Download, FolderOpen, Heart, House, ListMusic, Palette, Plus, RefreshCw, Settings } from "lucide-react";
 import { countLabel } from "../../app/library-groups";
 import { useShell } from "../layout/ShellContext";
 import type { SavedPlaylist } from "../../app/types";
@@ -129,6 +129,19 @@ export function Sidebar({
           </button>
         </div>
         <div className="playlist-list">
+          <div className="playlist-options-shell">
+            <button
+              className={`playlist-item playlist-item--favorites ${!page && shell.libraryFilter?.kind === "favorites" ? "selected" : ""}`}
+              onClick={shell.onOpenFavorites}
+              type="button"
+            >
+              <span className="playlist-item-label">
+                <Heart aria-hidden="true" fill="currentColor" size={14} strokeWidth={2} />
+                {shell.copy.favoritesTitle}
+              </span>
+              <span className="playlist-play">{shell.favoritesCount}</span>
+            </button>
+          </div>
           {savedPlaylists.map((playlist) => (
             <div className="playlist-options-shell" key={playlist.id}>
               <button

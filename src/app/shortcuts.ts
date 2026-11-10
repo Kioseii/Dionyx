@@ -9,6 +9,7 @@ export type ShortcutAction =
   | "toggle-mute"
   | "focus-search"
   | "toggle-lyrics"
+  | "toggle-favorite"
   | "toggle-queue"
   | "toggle-now-playing"
   | "toggle-shuffle"
@@ -69,6 +70,8 @@ export function resolveShortcut({ altKey, ctrlKey, key, metaKey, shiftKey }: Key
       return "toggle-mute";
     case "l":
       return "toggle-lyrics";
+    case "h":
+      return "toggle-favorite";
     case "q":
       return "toggle-queue";
     case "f":

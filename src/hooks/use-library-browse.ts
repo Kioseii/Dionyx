@@ -12,6 +12,9 @@ import { readStoredValue, writeStoredValue } from "../app/utils";
 export type LibraryView = "songs" | "albums" | "artists";
 
 type UseLibraryBrowseOptions = {
+  /** Library indices of the ❤ songs (the "Favoritas" view). */
+  favoriteIndices: number[];
+  favoritesLabel: string;
   tracks: LibraryTrack[];
   variousArtistsLabel: string;
 };
@@ -20,7 +23,7 @@ type UseLibraryBrowseOptions = {
  * Library browsing: Songs / Albums / Artists tabs and the album or artist
  * currently open. Groups are derived from the library tracks.
  */
-export function useLibraryBrowse({ tracks, variousArtistsLabel }: UseLibraryBrowseOptions) {
+export function useLibraryBrowse({ favoriteIndices, favoritesLabel, tracks, variousArtistsLabel }: UseLibraryBrowseOptions) {
   const [libraryView, setLibraryView] = useState<LibraryView>(() => {
     const stored = readStoredValue(storageKeys.libraryView);
     return stored === "albums" || stored === "artists" ? stored : "songs";
@@ -37,11 +40,30 @@ export function useLibraryBrowse({ tracks, variousArtistsLabel }: UseLibraryBrow
   );
   const artistGroups = useMemo(() => buildArtistGroups(tracks), [tracks]);
 
-  const activeGroup: TrackGroup | null = libraryFilter
-    ? (libraryFilter.kind === "album" ? albumGroups : artistGroups).find(
-        (group) => group.key === libraryFilter.key,
-      ) ?? null
-    : null;
+  const favoritesGroup = useMemo<TrackGroup>(
+    () => ({
+      albumCount: 0,
+      artistName: null,
+      coverTrack: favoriteIndices.map((index) => tracks[index]).find((track) => track?.artworkPath || track?.artworkDataUrl) ?? null,
+      indices: favoriteIndices,
+      key: "favorites",
+      latestAddedAt: 0,
+      name: favoritesLabel,
+      totalSeconds: favoriteIndices.reduce((sum, index) => {
+        const [minutes, seconds] = (tracks[index]?.duration ?? "").split(":").map(Number);
+        return Number.isFinite(minutes) && Number.isFinite(seconds) ? sum + minutes * 60 + seconds : sum;
+      }, 0),
+    }),
+    [favoriteIndices, favoritesLabel, tracks],
+  );
+
+  const activeGroup: TrackGroup | null = !libraryFilter
+    ? null
+    : libraryFilter.kind === "favorites"
+      ? favoritesGroup
+      : (libraryFilter.kind === "album" ? albumGroups : artistGroups).find(
+          (group) => group.key === libraryFilter.key,
+        ) ?? null;
 
   // The open album/artist disappeared (rescan, deletion): go back to the grid.
   useEffect(() => {

@@ -807,3 +807,82 @@
   outline: 2px solid rgb(var(--accent-rgb) / 0.6);
   outline-offset: 2px;
 }
+
+/* Inicio: escuchadas recientemente / más escuchadas. */
+.home-song-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 8px;
+}
+
+.home-song {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 8px 12px 8px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.03);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 140ms ease, border-color 140ms ease;
+}
+
+.home-song:hover {
+  border-color: rgb(var(--accent-soft-rgb) / 0.22);
+  background: rgb(var(--accent-rgb) / 0.08);
+}
+
+.home-song:focus-visible {
+  outline: 2px solid rgb(var(--accent-rgb) / 0.6);
+  outline-offset: 2px;
+}
+
+.home-song-cover {
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  object-fit: cover;
+}
+
+.home-song-cover--empty {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.05);
+  color: rgb(var(--text-faint-rgb) / 0.7);
+}
+
+.home-song-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.home-song-text strong,
+.home-song-text .muted {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.home-song-text strong {
+  font-size: 0.88rem;
+  color: rgb(var(--text-bright-rgb));
+}
+
+.home-song-text .muted {
+  font-size: 0.78rem;
+}
+
+.home-song-count {
+  flex-shrink: 0;
+  font-size: 0.74rem;
+  font-variant-numeric: tabular-nums;
+  color: rgb(var(--accent-soft-rgb));
+}

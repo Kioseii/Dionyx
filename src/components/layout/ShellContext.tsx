@@ -68,6 +68,13 @@ export type ShellContextValue = {
   onCloseLibraryGroup: () => void;
   onOpenAlbum: (albumKey: string) => void;
   onOpenArtist: (artistKey: string) => void;
+  /** ❤ songs present in the library, and opening their view. */
+  favoritesCount: number;
+  /** From the listening history: library indices for Home. */
+  recentlyPlayed: number[];
+  mostPlayed: Array<{ count: number; index: number }>;
+  libraryTracks: LibraryTrack[];
+  onOpenFavorites: () => void;
   onOpenTrackAlbum: (track: LibraryTrack) => void;
   onOpenTrackArtist: (track: LibraryTrack) => void;
   /** Plays library tracks as the queue (shuffled when `shuffle` is true). */

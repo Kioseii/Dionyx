@@ -228,6 +228,17 @@ pub async fn lastfm_now_playing(
     call("track.updateNowPlaying", params, true).await.map(|_| ())
 }
 
+/// Marks (love = true) or unmarks a song as loved on the user's Last.fm profile.
+#[tauri::command]
+pub async fn lastfm_love(session_key: String, artist: String, track: String, love: bool) -> Result<(), String> {
+    let mut params = BTreeMap::new();
+    params.insert("sk".to_string(), session_key);
+    params.insert("artist".to_string(), artist);
+    params.insert("track".to_string(), track);
+    let method = if love { "track.love" } else { "track.unlove" };
+    call(method, params, true).await.map(|_| ())
+}
+
 /// Sends up to 50 scrobbles in one request; returns how many were accepted.
 #[tauri::command]
 pub async fn lastfm_scrobble(session_key: String, items: Vec<ScrobbleItem>) -> Result<u32, String> {

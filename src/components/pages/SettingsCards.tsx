@@ -216,6 +216,7 @@ export function ShortcutsSettingsCard() {
     [[`${mod} ←`, `${mod} →`], copy.shortcutTrack],
     [[`${mod} ↑`, `${mod} ↓`], copy.shortcutVolume],
     [["M"], copy.shortcutMute],
+    [["H"], copy.shortcutFavorite],
     [[`${mod} F`, "/"], copy.shortcutSearch],
     [["L"], copy.shortcutLyrics],
     [["Q"], copy.shortcutQueue],

@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import dionyxLogoRaw from "./assets/dionyx-logo.svg?raw";
 import { equalizerBandsConfig, supportedAudioAccept } from "./app/constants";
 import { getEmptyTrack, uiText } from "./app/ui";
@@ -37,6 +37,11 @@ import { useResumePosition } from "./hooks/use-resume-position";
 import { useSleepTimer } from "./hooks/use-sleep-timer";
 import { useTrackTransitions } from "./hooks/use-track-transitions";
 import { useLastfm } from "./hooks/use-lastfm";
+import { usePlayHistory } from "./hooks/use-play-history";
+import { useFavoritesSync } from "./hooks/use-favorites-sync";
+import { favoritesStore, useFavoritesVersion } from "./app/favorites-store";
+import { indexByIdentity, mostPlayed, recentlyPlayed, songIdentity } from "./app/history";
+import { useListenTracker } from "./hooks/use-listen-tracker";
 import { useDiscoverCharts } from "./hooks/use-discover-charts";
 import { useAppUpdater } from "./hooks/use-app-updater";
 import { sanitizeCrossfadeSeconds } from "./app/transitions";
@@ -176,6 +181,13 @@ function App() {
     volume,
   } = usePlayerControlState();
   const { revokeBrowserSources, setUpdatedBrowserSources } = useBrowserSources();
+  // ❤ songs in library order (by artist + title, so they survive rescans).
+  const favoritesVersion = useFavoritesVersion();
+  const favoriteIndices = useMemo(() => {
+    void favoritesVersion;
+    const ids = new Set(favoritesStore.list().map((entry) => entry.id));
+    return tracks.flatMap((track, index) => (ids.has(songIdentity(track.artist, track.title)) ? [index] : []));
+  }, [favoritesVersion, tracks]);
   const {
     activeGroup,
     albumGroups,
@@ -185,7 +197,12 @@ function App() {
     libraryView,
     setLibraryFilter,
     setLibraryView,
-  } = useLibraryBrowse({ tracks, variousArtistsLabel: copy.variousArtists });
+  } = useLibraryBrowse({
+    favoriteIndices,
+    favoritesLabel: copy.favoritesTitle,
+    tracks,
+    variousArtistsLabel: copy.variousArtists,
+  });
 
   const {
     beginProgressScrub,
@@ -468,9 +485,28 @@ function App() {
   };
   // Volume the audio element plays at; the slider keeps the user's own value.
   const outputVolume = volume * normalizationFactor(selectedTrack, normalizationMode, normalizationPreamp);
-  const lastfm = useLastfm({
+  const lastfm = useLastfm();
+  const playHistory = usePlayHistory();
+  useFavoritesSync({ sessionKey: lastfm.sessionKey, userName: lastfm.userName });
+  // Home: recently / most played (matched to the library by artist + title).
+  const libraryByIdentity = useMemo(() => indexByIdentity(tracks), [tracks]);
+  const homeRecentlyPlayed = useMemo(
+    () => recentlyPlayed(playHistory.entries, libraryByIdentity, 10),
+    [libraryByIdentity, playHistory.entries],
+  );
+  const homeMostPlayed = useMemo(
+    () => mostPlayed(playHistory.entries, libraryByIdentity, Date.now() / 1000 - 30 * 24 * 60 * 60, 10),
+    [libraryByIdentity, playHistory.entries],
+  );
+  // One tracker decides when a play counts; history and Last.fm both use it.
+  useListenTracker({
     activeDuration,
     isPlaying,
+    onCounted: (play) => {
+      playHistory.record(play);
+      lastfm.scrobble(play.track, play.duration, play.startedAt);
+    },
+    onStart: lastfm.nowPlaying,
     playbackTime,
     selectedTrack,
     trackKey: getTrackKey(selectedTrack),
@@ -1030,6 +1066,17 @@ function App() {
     onCloseLibraryGroup: () => setLibraryFilter(null),
     onOpenAlbum: (key) => openLibraryGroup("album", key),
     onOpenArtist: (key) => openLibraryGroup("artist", key),
+    favoritesCount: favoriteIndices.length,
+    libraryTracks: tracks,
+    mostPlayed: homeMostPlayed,
+    recentlyPlayed: homeRecentlyPlayed,
+    onOpenFavorites: () => {
+      closePages();
+      setActivePlaylistId(null);
+      setIsDiscoverView(false);
+      setLibraryView("songs");
+      setLibraryFilter({ kind: "favorites", key: "favorites" });
+    },
     onOpenTrackAlbum: (track) => openLibraryGroup("album", getAlbumKey(track)),
     onOpenTrackArtist: (track) => openLibraryGroup("artist", getArtistKey(track)),
     onPlayLibraryIndices: (indices, shuffle) => {
@@ -1114,6 +1161,9 @@ function App() {
     "seek-forward": () => seekBy(SHORTCUT_SEEK_SECONDS),
     "toggle-lyrics": () => shellValue.onShowDetailPanel("lyrics"),
     "toggle-mute": () => setVolume(volume > 0 ? 0 : lastAudibleVolumeRef.current),
+    "toggle-favorite": () => {
+      if (selectedTrack.path || selectedTrack.source) favoritesStore.toggle(selectedTrack);
+    },
     "toggle-now-playing": () => (nowPlayingOpen ? setNowPlayingOpen(false) : shellValue.onOpenNowPlaying()),
     "toggle-playback": () => void handleTogglePlaybackRequest(),
     "toggle-queue": () => shellValue.onShowDetailPanel("queue"),

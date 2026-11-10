@@ -1,3 +1,4 @@
+import { HeartButton } from "../library/HeartButton";
 import { type ComponentType, type CSSProperties, type FormEvent, useEffect, useRef, useState } from "react";
 import {
   ChevronDown,
@@ -156,7 +157,16 @@ export function NowPlayingView({
           </div>
 
           <div className="np-track-copy">
-            <h2 className="np-title">{selectedTrack.title}</h2>
+            <div className="np-title-row">
+              <h2 className="np-title">{selectedTrack.title}</h2>
+              <HeartButton
+                artist={selectedTrack.artist}
+                className="np-heart"
+                labels={{ add: shell.copy.favoriteAdd, remove: shell.copy.favoriteRemove }}
+                size={22}
+                title={selectedTrack.title}
+              />
+            </div>
             <p className="np-subtitle">
               <button
                 className="player-link"
