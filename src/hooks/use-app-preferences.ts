@@ -11,6 +11,7 @@ import {
   writeStoredValue,
 } from "../app/utils";
 import { sanitizeCrossfadeSeconds } from "../app/transitions";
+import { sanitizeNormalizationMode, sanitizePreampDb, type NormalizationMode } from "../app/normalization";
 
 export function useAppPreferences() {
   const [appLanguage, setAppLanguage] = useState<AppLanguage>(() =>
@@ -27,6 +28,12 @@ export function useAppPreferences() {
     sanitizeHexColor(readStoredValue(storageKeys.themeColor)),
   );
   const [gapless, setGapless] = useState(() => readStoredValue(storageKeys.gapless) === "true");
+  const [normalizationMode, setNormalizationMode] = useState<NormalizationMode>(() =>
+    sanitizeNormalizationMode(readStoredValue(storageKeys.normalization)),
+  );
+  const [normalizationPreamp, setNormalizationPreamp] = useState(() =>
+    sanitizePreampDb(readStoredValue(storageKeys.normalizationPreamp) ?? 0),
+  );
   const [crossfadeSeconds, setCrossfadeSeconds] = useState(() =>
     sanitizeCrossfadeSeconds(readStoredValue(storageKeys.crossfadeSeconds) ?? 0),
   );
@@ -69,6 +76,11 @@ export function useAppPreferences() {
   }, [gapless]);
 
   useEffect(() => {
+    writeStoredValue(storageKeys.normalization, normalizationMode);
+    writeStoredValue(storageKeys.normalizationPreamp, String(normalizationPreamp));
+  }, [normalizationMode, normalizationPreamp]);
+
+  useEffect(() => {
     writeStoredValue(storageKeys.crossfadeSeconds, String(crossfadeSeconds));
   }, [crossfadeSeconds]);
 
@@ -100,8 +112,12 @@ export function useAppPreferences() {
     accentFromArtwork,
     crossfadeSeconds,
     gapless,
+    normalizationMode,
+    normalizationPreamp,
     setCrossfadeSeconds,
     setGapless,
+    setNormalizationMode,
+    setNormalizationPreamp,
     appLanguage,
     detailPanelOpen,
     detailPanelTab,

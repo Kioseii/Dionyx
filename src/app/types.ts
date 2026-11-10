@@ -45,6 +45,10 @@ export type LibraryTrack = {
   artworkDataUrl?: string | null;
   /** File modification time in Unix seconds ("recently added"). */
   modifiedAt?: number | null;
+  /** ReplayGain in dB (ReplayGain 2 reference) and linear peak, from the tags. */
+  replayGainTrack?: number | null;
+  replayGainAlbum?: number | null;
+  replayGainPeak?: number | null;
   source?: string;
 };
 

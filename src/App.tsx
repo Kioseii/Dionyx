@@ -40,6 +40,7 @@ import { useLastfm } from "./hooks/use-lastfm";
 import { useDiscoverCharts } from "./hooks/use-discover-charts";
 import { useAppUpdater } from "./hooks/use-app-updater";
 import { sanitizeCrossfadeSeconds } from "./app/transitions";
+import { normalizationFactor, sanitizePreampDb } from "./app/normalization";
 import { SHORTCUT_SEEK_SECONDS, SHORTCUT_VOLUME_STEP } from "./app/shortcuts";
 import { getTrackArtworkSrc, getTrackKey } from "./app/utils";
 import { useLibraryRuntimeState } from "./hooks/use-library-runtime-state";
@@ -100,6 +101,10 @@ function App() {
     gapless,
     setCrossfadeSeconds,
     setGapless,
+    normalizationMode,
+    normalizationPreamp,
+    setNormalizationMode,
+    setNormalizationPreamp,
   } = useAppPreferences();
   const copy = uiText[appLanguage];
   const {
@@ -461,6 +466,8 @@ function App() {
     }
     handleTrackEnded();
   };
+  // Volume the audio element plays at; the slider keeps the user's own value.
+  const outputVolume = volume * normalizationFactor(selectedTrack, normalizationMode, normalizationPreamp);
   const lastfm = useLastfm({
     activeDuration,
     isPlaying,
@@ -557,7 +564,7 @@ function App() {
       queuePosition < playbackQueue.length - 1 || (repeatMode === "all" && playbackQueue.length > 1),
     isPlaying,
     selectedTrackPath: selectedTrack.path ?? "",
-    volume,
+    volume: outputVolume,
   });
   const {
     handleAddDownloadRequest,
@@ -926,6 +933,7 @@ function App() {
     selectedTrack,
   });
   useAppGlobalEffects({
+    outputVolume,
     activeDuration,
     activePlaylistOpen: Boolean(activePlaylist),
     appLanguage,
@@ -962,6 +970,12 @@ function App() {
   };
 
   const shellValue: ShellContextValue = {
+    normalization: {
+      mode: normalizationMode,
+      onModeChange: setNormalizationMode,
+      onPreampChange: (db) => setNormalizationPreamp(sanitizePreampDb(db)),
+      preampDb: normalizationPreamp,
+    },
     updater,
     discoverCharts: discoverChartsState,
     lastfm,

@@ -153,6 +153,8 @@ export function useTrackTransitions(options: UseTrackTransitionsOptions) {
     activeRef.current = transition;
 
     const source = main.currentSrc || main.src;
+    // The outgoing song fades from its own level (its normalization may differ).
+    const outgoingVolume = main.volume;
     const fail = () => {
       failedSourceRef.current = source;
       finish(true);
@@ -205,9 +207,8 @@ export function useTrackTransitions(options: UseTrackTransitionsOptions) {
       fadeTimer = window.setInterval(() => {
         const progress = (performance.now() - startedAt) / (leadSeconds * 1000);
         const gains = crossfadeGains(progress);
-        const volume = optionsRef.current.volume;
-        main.volume = volume * gains.incoming;
-        tail.volume = volume * gains.outgoing;
+        main.volume = optionsRef.current.volume * gains.incoming;
+        tail.volume = outgoingVolume * gains.outgoing;
         if (progress >= 1) finish(true);
       }, FADE_STEP_MS);
     }

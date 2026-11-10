@@ -1,4 +1,5 @@
 import { MAX_CROSSFADE_SECONDS } from "../../app/transitions";
+import { NORMALIZATION_PREAMP_RANGE } from "../../app/normalization";
 import type { CSSProperties } from "react";
 import { useEffect, useState } from "react";
 import { FolderOpen, PictureInPicture2, SlidersHorizontal } from "lucide-react";
@@ -30,7 +31,7 @@ export function LibrarySettingsCard() {
 
 /** Settings card: shortcuts to the playback tools. */
 export function PlaybackSettingsCard() {
-  const { copy, onEnterMiniMode, onOpenEqualizer, playbackTransitions } = useShell();
+  const { copy, normalization, onEnterMiniMode, onOpenEqualizer, playbackTransitions } = useShell();
   const { crossfadeSeconds, gapless, onCrossfadeSecondsChange, onGaplessChange } = playbackTransitions;
 
   return (
@@ -87,6 +88,48 @@ export function PlaybackSettingsCard() {
           type="range"
           value={crossfadeSeconds}
         />
+
+        <div className="transition-row">
+          <div>
+            <strong id="normalization-label">{copy.normalizationLabel}</strong>
+            <p className="muted settings-copy">{copy.normalizationHint}</p>
+          </div>
+        </div>
+        <div aria-labelledby="normalization-label" className="normalization-modes" role="radiogroup">
+          {(["off", "track", "album"] as const).map((value) => (
+            <button
+              aria-checked={normalization.mode === value}
+              className={`normalization-mode${normalization.mode === value ? " active" : ""}`}
+              key={value}
+              onClick={() => normalization.onModeChange(value)}
+              role="radio"
+              type="button"
+            >
+              {value === "off" ? copy.normalizationOff : value === "track" ? copy.normalizationTrack : copy.normalizationAlbum}
+            </button>
+          ))}
+        </div>
+        {normalization.mode !== "off" ? (
+          <>
+            <label className="transition-row transition-row--slider" htmlFor="preamp-range">
+              <span>{copy.normalizationPreamp}</span>
+              <span className="transition-value">
+                {normalization.preampDb > 0 ? `+${normalization.preampDb}` : normalization.preampDb} dB
+              </span>
+            </label>
+            <input
+              className="volume-slider transition-slider"
+              id="preamp-range"
+              max={NORMALIZATION_PREAMP_RANGE.max}
+              min={NORMALIZATION_PREAMP_RANGE.min}
+              onChange={(event) => normalization.onPreampChange(Number(event.currentTarget.value))}
+              step={1}
+              style={{ "--pct": `${((normalization.preampDb - NORMALIZATION_PREAMP_RANGE.min) / (NORMALIZATION_PREAMP_RANGE.max - NORMALIZATION_PREAMP_RANGE.min)) * 100}%` } as CSSProperties}
+              type="range"
+              value={normalization.preampDb}
+            />
+          </>
+        ) : null}
       </div>
     </div>
   );

@@ -556,6 +556,11 @@ struct LibraryTrack {
     artwork_data_url: Option<String>,
     /// File modification time (Unix seconds), used for "recently added".
     modified_at: Option<u64>,
+    /// ReplayGain (dB, relative to the ReplayGain 2 reference) and peak
+    /// (linear, 1.0 = full scale), when the file has them.
+    replay_gain_track: Option<f32>,
+    replay_gain_album: Option<f32>,
+    replay_gain_peak: Option<f32>,
 }
 
 #[derive(Serialize)]
@@ -702,9 +707,17 @@ fn track_from_path(path: &Path, artwork_dir: Option<&Path>) -> LibraryTrack {
             .ok()
             .and_then(|modified| modified.duration_since(UNIX_EPOCH).ok())
             .map(|elapsed| elapsed.as_secs()),
+        replay_gain_track: None,
+        replay_gain_album: None,
+        replay_gain_peak: None,
     };
 
     if let Ok(tagged_file) = Probe::open(path).and_then(|probe| probe.read()) {
+        // Taggers may write ReplayGain to a secondary tag (e.g. APE next to ID3).
+        for tag in tagged_file.tags() {
+            read_replay_gain(tag, &mut track);
+        }
+
         if let Some(tag) = tagged_file
             .primary_tag()
             .or_else(|| tagged_file.first_tag())
@@ -737,6 +750,49 @@ fn track_from_path(path: &Path, artwork_dir: Option<&Path>) -> LibraryTrack {
     }
 
     track
+}
+
+/// Fills the ReplayGain fields that are still empty from one tag.
+fn read_replay_gain(tag: &lofty::tag::Tag, track: &mut LibraryTrack) {
+    use lofty::tag::ItemKey;
+
+    let text = |key: ItemKey| tag.get_string(&key).map(str::to_string);
+
+    if track.replay_gain_track.is_none() {
+        track.replay_gain_track = text(ItemKey::ReplayGainTrackGain)
+            .and_then(|value| parse_gain_db(&value))
+            .or_else(|| text(ItemKey::Unknown("R128_TRACK_GAIN".into())).and_then(|value| parse_r128_gain(&value)));
+    }
+    if track.replay_gain_album.is_none() {
+        track.replay_gain_album = text(ItemKey::ReplayGainAlbumGain)
+            .and_then(|value| parse_gain_db(&value))
+            .or_else(|| text(ItemKey::Unknown("R128_ALBUM_GAIN".into())).and_then(|value| parse_r128_gain(&value)));
+    }
+    if track.replay_gain_peak.is_none() {
+        track.replay_gain_peak = text(ItemKey::ReplayGainTrackPeak)
+            .or_else(|| text(ItemKey::ReplayGainAlbumPeak))
+            .and_then(|value| parse_peak(&value));
+    }
+}
+
+/// "-6.54 dB", "+1.2 dB", "-6,54" -> dB. Absurd values are ignored.
+fn parse_gain_db(value: &str) -> Option<f32> {
+    let cleaned = value.trim().trim_end_matches(|c: char| c.is_ascii_alphabetic() || c.is_whitespace());
+    let number: f32 = cleaned.trim().replace(',', ".").parse().ok()?;
+    (number.is_finite() && (-60.0..=30.0).contains(&number)).then_some(number)
+}
+
+/// Opus R128 gain: Q7.8 fixed point relative to -23 LUFS; ReplayGain's
+/// reference is 5 dB louder (-18 LUFS).
+fn parse_r128_gain(value: &str) -> Option<f32> {
+    let raw: i32 = value.trim().parse().ok()?;
+    let db = raw as f32 / 256.0 + 5.0;
+    (-60.0..=30.0).contains(&db).then_some(db)
+}
+
+fn parse_peak(value: &str) -> Option<f32> {
+    let number: f32 = value.trim().replace(',', ".").parse().ok()?;
+    (number.is_finite() && number > 0.0 && number <= 10.0).then_some(number)
 }
 
 fn parse_track_name(file_stem: &str) -> (String, String) {
@@ -2319,6 +2375,40 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn replay_gain_values_parse_from_common_formats() {
+        assert_eq!(parse_gain_db("-6.54 dB"), Some(-6.54));
+        assert_eq!(parse_gain_db("+1.20 dB"), Some(1.2));
+        assert_eq!(parse_gain_db("-3,5"), Some(-3.5));
+        assert_eq!(parse_gain_db("loud"), None);
+        assert_eq!(parse_gain_db("-900 dB"), None);
+        // R128: -1536 / 256 = -6 dB vs -23 LUFS -> -1 dB vs ReplayGain's -18 LUFS.
+        assert_eq!(parse_r128_gain("-1536"), Some(-1.0));
+        assert_eq!(parse_peak("0.988"), Some(0.988));
+        assert_eq!(parse_peak("0"), None);
+    }
+
+    #[test]
+    fn replay_gain_is_read_from_a_tag() {
+        use lofty::tag::{ItemKey, Tag, TagType};
+
+        let mut tag = Tag::new(TagType::VorbisComments);
+        tag.insert_text(ItemKey::ReplayGainTrackGain, "-7.25 dB".into());
+        tag.insert_text(ItemKey::ReplayGainTrackPeak, "0.95".into());
+        // Files keep unrecognized keys as Unknown; insert_text refuses them, so add it directly.
+        tag.insert_unchecked(lofty::tag::TagItem::new(
+            ItemKey::Unknown("R128_ALBUM_GAIN".into()),
+            lofty::tag::ItemValue::Text("-512".into()),
+        ));
+
+        let mut track = track_from_path(Path::new("missing/Artist - Song.flac"), None);
+        read_replay_gain(&tag, &mut track);
+
+        assert_eq!(track.replay_gain_track, Some(-7.25));
+        assert_eq!(track.replay_gain_peak, Some(0.95));
+        assert_eq!(track.replay_gain_album, Some(3.0));
+    }
 
     #[test]
     fn expected_sha256_finds_asset_line() {
