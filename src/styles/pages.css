@@ -901,7 +901,6 @@
   max-height: 420px;
   margin-top: 10px;
   overflow-y: auto;
-  scrollbar-width: thin;
 }
 
 .duplicate-group {
