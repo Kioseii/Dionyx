@@ -6,12 +6,12 @@
 
 **Un reproductor de música local para tu escritorio: tus archivos, tus colores, tu sonido.**
 
-[![Versión](https://img.shields.io/badge/versi%C3%B3n-1.5.0-8b5cf6)](CONTEXT.md)
+[![Versión](https://img.shields.io/badge/versi%C3%B3n-1.5.0-8b5cf6)](../../releases/latest)
 [![Tauri 2](https://img.shields.io/badge/Tauri-2-24c8db?logo=tauri&logoColor=white)](https://tauri.app)
 [![React 19](https://img.shields.io/badge/React-19-61dafb?logo=react&logoColor=black)](https://react.dev)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178c6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
 [![Rust](https://img.shields.io/badge/Rust-backend-dea584?logo=rust&logoColor=black)](https://www.rust-lang.org)
-![Plataforma](https://img.shields.io/badge/plataforma-Windows%20%7C%20macOS-555)
+![Plataforma](https://img.shields.io/badge/plataforma-Windows-555)
 
 [English](README.md) · Español
 
@@ -75,7 +75,6 @@ npm run tauri dev      # ejecutar en desarrollo
 npm run tauri build    # crear el instalador (src-tauri/target/release/bundle)
 ```
 
-Para macOS (build privada, sin firmar) ver [MACOS_PRIVATE_BUILD.md](MACOS_PRIVATE_BUILD.md).
 
 ### Opcional: scrobbling a Last.fm
 
@@ -93,7 +92,6 @@ cd src-tauri && cargo test && cargo clippy    # tests y lints del back
 | --- | --- |
 | `src/` | Interfaz en React + TypeScript (`components/`, `hooks/`, lógica pura en `app/`) |
 | `src-tauri/` | Back end en Rust: escaneo, etiquetas, descargas, firma de Last.fm, bandeja |
-| `CONTEXT.md` | Estado del proyecto, decisiones técnicas y reglas del audio |
 
 ## Créditos
 

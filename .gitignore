@@ -22,3 +22,8 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Notas internas del proyecto (solo locales, fuera de GitHub)
+CONTEXT.md
+MACOS_PRIVATE_BUILD.md
+docs/
