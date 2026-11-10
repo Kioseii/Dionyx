@@ -1,3 +1,4 @@
+import { StatsPage } from "../pages/StatsPage";
 import { UpdateNotice } from "./UpdateNotice";
 import type { ComponentProps } from "react";
 import { DiscoverPanel } from "../discover/DiscoverPanel";
@@ -40,6 +41,7 @@ export function AppMainStageHost({
       {activePage ? (
         <div className="shell-page-root" ref={onPageRootChange}>
           {activePage === "home" ? <HomePage /> : null}
+          {activePage === "stats" ? <StatsPage /> : null}
         </div>
       ) : null}
 

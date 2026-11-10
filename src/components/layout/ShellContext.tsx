@@ -11,7 +11,7 @@ import type { uiText } from "../../app/ui";
 export type DetailPanelTab = "now" | "lyrics" | "queue";
 
 /** Full pages shown in the main area instead of the library / Discover. */
-export type ShellPage = "home" | "downloads" | "appearance" | "settings";
+export type ShellPage = "home" | "stats" | "downloads" | "appearance" | "settings";
 
 /**
  * State and actions of the app "shell" (sidebar shortcuts, right panel,
@@ -85,6 +85,9 @@ export type ShellContextValue = {
   onImportPlaylist: () => void;
   /** Rescan the current folder quietly, keeping the song that is playing. */
   onRescanQuietly: () => Promise<void>;
+  /** Listening history and the statistics page. */
+  historyEntries: import("../../app/history").HistoryEntry[];
+  onOpenStats: () => void;
   onOpenTrackAlbum: (track: LibraryTrack) => void;
   onOpenTrackArtist: (track: LibraryTrack) => void;
   /** Plays library tracks as the queue (shuffled when `shuffle` is true). */
