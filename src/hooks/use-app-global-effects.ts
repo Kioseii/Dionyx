@@ -12,7 +12,7 @@ type UseAppGlobalEffectsOptions = {
   audioRef: RefObject<HTMLAudioElement | null>;
   equalizerPresetMenuRef: RefObject<HTMLDivElement | null>;
   equalizerValues: number[];
-  getItunesCover: (query: string, entity: "musicArtist" | "song") => Promise<string | null>;
+  getItunesCover: (query: string, entity: "musicArtist" | "song", artist?: string) => Promise<string | null>;
   hideOnTray: boolean;
   isEqualizerEnabled: boolean;
   isEqualizerPresetMenuOpen: boolean;

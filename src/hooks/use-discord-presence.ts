@@ -11,7 +11,7 @@ type UseDiscordPresenceOptions = {
   activeDuration: number;
   appLanguage: AppLanguage;
   audioRef: RefObject<HTMLAudioElement | null>;
-  getItunesCover: (query: string, entity: "musicArtist" | "song") => Promise<string | null>;
+  getItunesCover: (query: string, entity: "musicArtist" | "song", artist?: string) => Promise<string | null>;
   isPlaying: boolean;
   selectedTrackArtist: string;
   selectedTrackTitle: string;
@@ -100,7 +100,7 @@ export function useDiscordPresence({
         if (trackKey !== discordLastTrackKeyRef.current) {
           discordLastTrackKeyRef.current = trackKey;
           discordCoverUrlRef.current =
-            (await getItunesCover(`${selectedTrackArtist} ${selectedTrackTitle}`, "song").catch(
+            (await getItunesCover(`${selectedTrackArtist} ${selectedTrackTitle}`, "song", selectedTrackArtist).catch(
               () => "",
             )) || null;
         }

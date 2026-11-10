@@ -99,7 +99,7 @@ export function useDiscoverCharts({
   tracks,
 }: {
   active: boolean;
-  getItunesCover: (term: string, entity: "musicArtist" | "song") => Promise<string>;
+  getItunesCover: (term: string, entity: "musicArtist" | "song", artist?: string) => Promise<string>;
   lastfmUserName: string | null;
   tracks: LibraryTrack[];
 }) {
@@ -243,7 +243,7 @@ export function useDiscoverCharts({
             batch.map(async (track) => {
               if (track.coverUrl) return;
               const term = `${getLastfmTrackArtist(track)} ${track.name}`;
-              const cover = await getItunesCover(term, "song");
+              const cover = await getItunesCover(term, "song", getLastfmTrackArtist(track));
               coverCacheRef.current.set(term, cover);
               track.coverUrl = cover;
             }),

@@ -9,6 +9,7 @@ import type {
 } from "../app/types";
 import { normalizeDiscoverLookup } from "../app/utils";
 import { lastfmPublicGet } from "../app/lastfm-public";
+import { findCover, isLastfmPlaceholder } from "../app/covers";
 
 
 type UseDiscoverOptions = {
@@ -76,26 +77,17 @@ export function useDiscover({
     prefer = "large",
   ) {
     if (!images) return "";
-    return (images.find((item) => item.size === prefer) ?? images[images.length - 1])?.["#text"] ?? "";
+    const url = (images.find((item) => item.size === prefer) ?? images[images.length - 1])?.["#text"] ?? "";
+    return isLastfmPlaceholder(url) ? "" : url;
   }
 
   function getDiscoverPreviewKey(artistName: string, trackName: string) {
     return `${artistName}::${trackName}`;
   }
 
-  async function getItunesCover(term: string, entity: "musicArtist" | "song"): Promise<string> {
-    try {
-      const url = `https://itunes.apple.com/search?term=${encodeURIComponent(term)}&entity=${entity}&limit=1&media=music`;
-      const response = await fetch(url);
-      if (!response.ok) return "";
-      const data = await response.json() as { results?: { artworkUrl100?: string }[] };
-      const artwork = data.results?.[0]?.artworkUrl100;
-      if (!artwork) return "";
-      return artwork.replace(/\d+x\d+bb/, "600x600bb");
-    } catch {
-      return "";
-    }
-  }
+  // Cover lookups (Deezer, then iTunes) with a shared on-disk cache.
+  const getItunesCover = (term: string, entity: "musicArtist" | "song", artist?: string) =>
+    findCover(term, entity, artist);
 
   async function getItunesPreviewUrl(artistName: string, trackName: string): Promise<string> {
     try {
@@ -260,10 +252,12 @@ export function useDiscover({
           limit: "3",
         }).catch(() => null) as { toptracks?: { track?: LastFmTrack[] } } | null;
         artist.topTracks = tracksData?.toptracks?.track ?? [];
+        // Artist cards: the cover of their top song (album art is reliable;
+        // artist photos sometimes belong to a duplicate profile), else a photo.
         const firstTrack = artist.topTracks[0];
-        if (firstTrack) {
-          artist.coverUrl = await getItunesCover(`${artist.name} ${firstTrack.name}`, "song");
-        }
+        artist.coverUrl =
+          (firstTrack ? await findCover(`${artist.name} ${firstTrack.name}`, "song", artist.name) : "") ||
+          (await findCover(artist.name, "musicArtist"));
       }),
     );
 

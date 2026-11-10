@@ -447,7 +447,7 @@ async fn fetch_url(url: String) -> Result<String, String> {
 /// Hosts the frontend is allowed to reach through `fetch_url` (which exists
 /// to bypass CORS). Anything else is refused so the command cannot be used as
 /// a general-purpose proxy.
-const FETCH_URL_ALLOWED_HOSTS: &[&str] = &["ws.audioscrobbler.com", "lrclib.net"];
+const FETCH_URL_ALLOWED_HOSTS: &[&str] = &["ws.audioscrobbler.com", "lrclib.net", "api.deezer.com"];
 
 fn validate_fetch_url(url: &str) -> Result<reqwest::Url, String> {
     let parsed = reqwest::Url::parse(url).map_err(|_| "URL no valida.".to_string())?;
@@ -2334,6 +2334,8 @@ mod tests {
     #[test]
     fn fetch_url_only_allows_known_https_hosts() {
         assert!(validate_fetch_url("https://lrclib.net/api/get?track_name=x").is_ok());
+        assert!(validate_fetch_url("https://api.deezer.com/search?q=x").is_ok());
+        assert!(validate_fetch_url("https://cdn-images.dzcdn.net/x.jpg").is_err());
         assert!(validate_fetch_url("https://ws.audioscrobbler.com/2.0/?method=x").is_ok());
         assert!(validate_fetch_url("http://lrclib.net/api/get").is_err());
         assert!(validate_fetch_url("https://evil.example/").is_err());
