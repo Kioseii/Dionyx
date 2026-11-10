@@ -84,6 +84,7 @@ export function PlaylistModal({
 
   return (
     <ModalFrame
+      className="playlist-modal"
       labelledBy="playlist-modal-title"
       onClose={onClose}
     >
