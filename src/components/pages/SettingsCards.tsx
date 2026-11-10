@@ -203,7 +203,7 @@ export function ShortcutsSettingsCard() {
 
 /** Settings card: app name and version. */
 export function AboutSettingsCard() {
-  const { copy } = useShell();
+  const { copy, updater } = useShell();
   const [version, setVersion] = useState<string | null>(null);
 
   useEffect(() => {
@@ -229,6 +229,42 @@ export function AboutSettingsCard() {
       <span className="font-preset-label">{copy.settingsAboutSection}</span>
       <strong>{version ? `DIONYX ${version}` : "DIONYX"}</strong>
       <p className="muted settings-copy">{copy.settingsAboutHint}</p>
+
+      {isTauriRuntime() ? (
+        <div className="transition-settings">
+          <div className="transition-row">
+            <span id="auto-update-label">{copy.updateAutoCheck}</span>
+            <button
+              aria-checked={updater.autoCheck}
+              aria-labelledby="auto-update-label"
+              className={`settings-toggle ${updater.autoCheck ? "active" : ""}`}
+              onClick={() => updater.setAutoCheck(!updater.autoCheck)}
+              role="switch"
+              type="button"
+            >
+              <span className="settings-toggle-thumb" />
+            </button>
+          </div>
+          <div className="settings-options">
+            {updater.status === "available" && updater.update ? (
+              <button className="settings-option lastfm-connect" onClick={() => void updater.install()} type="button">
+                {copy.updateInstall} {updater.update.version}
+              </button>
+            ) : (
+              <button
+                className="settings-option"
+                disabled={updater.status === "checking" || updater.status === "downloading"}
+                onClick={() => void updater.checkNow()}
+                type="button"
+              >
+                {updater.status === "checking" ? copy.updateChecking : copy.updateCheckNow}
+              </button>
+            )}
+          </div>
+          {updater.status === "up-to-date" ? <p className="muted settings-copy">{copy.updateUpToDate}</p> : null}
+          {updater.status === "error" ? <p className="muted settings-copy">{copy.updateError}</p> : null}
+        </div>
+      ) : null}
     </div>
   );
 }

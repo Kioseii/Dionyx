@@ -5,6 +5,7 @@ import type { LibraryView } from "../../hooks/use-library-browse";
 import type { useSleepTimer } from "../../hooks/use-sleep-timer";
 import type { useLastfm } from "../../hooks/use-lastfm";
 import type { useDiscoverCharts } from "../../hooks/use-discover-charts";
+import type { useAppUpdater } from "../../hooks/use-app-updater";
 import type { uiText } from "../../app/ui";
 
 export type DetailPanelTab = "now" | "lyrics" | "queue";
@@ -21,6 +22,8 @@ export type ShellContextValue = {
   /** Accent follows the playing cover (falls back to the chosen color). */
   accentFromArtwork: boolean;
   onToggleAccentFromArtwork: () => void;
+  /** App updates from GitHub Releases (notice + Settings › About). */
+  updater: ReturnType<typeof useAppUpdater>;
   /** Discover › Charts: your genres or global, paginated. */
   discoverCharts: ReturnType<typeof useDiscoverCharts>;
   /** Last.fm account and scrobbling (Settings). */

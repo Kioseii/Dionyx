@@ -1,0 +1,73 @@
+name: Release DIONYX (Windows)
+
+# Push a tag such as v1.5.0 to build the signed installer and publish a GitHub
+# Release with latest.json, which installed copies read to update themselves.
+#
+# Repository secrets needed (Settings > Secrets and variables > Actions):
+#   TAURI_SIGNING_PRIVATE_KEY           contents of ~/.tauri/dionyx.key
+#   TAURI_SIGNING_PRIVATE_KEY_PASSWORD  contents of ~/.tauri/dionyx.key.password
+#   DIONYX_LASTFM_API_KEY               optional, enables scrobbling in the build
+#   DIONYX_LASTFM_API_SECRET            optional, enables scrobbling in the build
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release-windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Tag must match the app version
+        shell: pwsh
+        run: |
+          $version = (Get-Content src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version
+          if ("v$version" -ne "${{ github.ref_name }}") {
+            Write-Error "Tag ${{ github.ref_name }} does not match tauri.conf.json version $version"
+            exit 1
+          }
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build, sign and publish
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          DIONYX_LASTFM_API_KEY: ${{ secrets.DIONYX_LASTFM_API_KEY }}
+          DIONYX_LASTFM_API_SECRET: ${{ secrets.DIONYX_LASTFM_API_SECRET }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: DIONYX ${{ github.ref_name }}
+          releaseBody: |
+            Install with the `-setup.exe` file below. Installed copies update themselves.
+            If you installed an older version with the `.msi`, uninstall it first (your music and settings are kept).
+          releaseDraft: false
+          prerelease: false
+          includeUpdaterJson: true
+          # Updater signatures only in releases, so local builds need no key.
+          args: --config {"bundle":{"createUpdaterArtifacts":true}}

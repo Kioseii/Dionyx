@@ -1,3 +1,4 @@
+import { UpdateNotice } from "./UpdateNotice";
 import type { ComponentProps } from "react";
 import { DiscoverPanel } from "../discover/DiscoverPanel";
 import { LibraryPanel } from "../library/LibraryPanel";
@@ -29,6 +30,8 @@ export function AppMainStageHost({
   return (
     <section className="main-stage">
       <TopBar {...topBarProps} />
+
+      <UpdateNotice />
 
       <LibraryStatusBanner {...libraryStatusBannerProps} />
 
