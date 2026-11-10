@@ -17,7 +17,7 @@ export type TrackGroup = {
   latestAddedAt: number;
 };
 
-export type LibraryFilter = { kind: "album" | "artist"; key: string } | null;
+export type LibraryFilter = { kind: "album" | "artist" | "favorites"; key: string } | null;
 
 const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
 

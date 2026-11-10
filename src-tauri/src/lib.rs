@@ -15,6 +15,7 @@ use std::{
 };
 use tauri::Manager;
 
+mod history;
 mod lastfm;
 
 // ── Discord Rich Presence (custom IPC — supports activity type 2 "Listening") ──
@@ -2296,7 +2297,10 @@ pub fn run() {
             lastfm::lastfm_begin_auth,
             lastfm::lastfm_finish_auth,
             lastfm::lastfm_now_playing,
-            lastfm::lastfm_scrobble
+            lastfm::lastfm_scrobble,
+            lastfm::lastfm_love,
+            history::history_append,
+            history::history_read
         ])
         .setup(|app| {
             use tauri::{

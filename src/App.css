@@ -920,7 +920,7 @@ button {
 .table-head,
 .table-row {
   display: grid;
-  grid-template-columns: 36px minmax(0, 2fr) minmax(0, 1.35fr) 110px 64px 28px;
+  grid-template-columns: 36px minmax(0, 2fr) minmax(0, 1.35fr) 110px 64px 62px;
   gap: 14px;
   align-items: center;
 }
@@ -3900,7 +3900,7 @@ button {
 @media (max-width: 1080px) {
   .table-head,
   .table-row {
-    grid-template-columns: 36px minmax(0, 2fr) minmax(0, 1.35fr) 110px 28px;
+    grid-template-columns: 36px minmax(0, 2fr) minmax(0, 1.35fr) 110px 62px;
   }
 
   .time-head,
@@ -3913,7 +3913,7 @@ button {
 @media (max-width: 760px) {
   .table-head,
   .table-row {
-    grid-template-columns: 36px minmax(0, 1fr) 110px 28px;
+    grid-template-columns: 36px minmax(0, 1fr) 110px 62px;
   }
 
   .album-head,

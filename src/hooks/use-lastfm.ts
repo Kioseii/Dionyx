@@ -5,9 +5,6 @@ import {
   appendToQueue,
   buildScrobbleItem,
   classifyLastfmError,
-  isScrobbleEligible,
-  listenedDelta,
-  scrobbleThreshold,
   type ScrobbleItem,
 } from "../app/scrobble";
 import type { LibraryTrack } from "../app/types";
@@ -29,43 +26,13 @@ function readJson<T>(key: string, fallback: T): T {
   }
 }
 
-type PlayInstance = {
-  listened: number;
-  nowPlayingSent: boolean;
-  previousTime: number;
-  scrobbled: boolean;
-  startedAt: number | null;
-  trackKey: string;
-};
-
-const newInstance = (trackKey: string): PlayInstance => ({
-  listened: 0,
-  nowPlayingSent: false,
-  previousTime: 0,
-  scrobbled: false,
-  startedAt: null,
-  trackKey,
-});
-
 /**
  * Last.fm scrobbling with the listener's own account: connect (browser
  * approval), "now playing" updates, scrobbles once Last.fm's rule is met
  * (half the song or 4 minutes), and a queue that keeps plays made offline
  * until they can be sent.
  */
-export function useLastfm({
-  activeDuration,
-  isPlaying,
-  playbackTime,
-  selectedTrack,
-  trackKey,
-}: {
-  activeDuration: number;
-  isPlaying: boolean;
-  playbackTime: number;
-  selectedTrack: LibraryTrack;
-  trackKey: string;
-}) {
+export function useLastfm() {
   const [configured, setConfigured] = useState(false);
   const [session, setSession] = useState<LastfmSession | null>(() =>
     readJson<LastfmSession | null>(storageKeys.lastfmSession, null),
@@ -77,12 +44,13 @@ export function useLastfm({
 
   const queueRef = useRef<ScrobbleItem[]>(readJson<ScrobbleItem[]>(storageKeys.lastfmQueue, []));
   const sendingRef = useRef(false);
-  const instanceRef = useRef<PlayInstance>(newInstance(trackKey));
   const pollRef = useRef<{ cancelled: boolean } | null>(null);
-  const latestRef = useRef({ activeDuration, selectedTrack, session });
-  latestRef.current = { activeDuration, selectedTrack, session };
+  const latestRef = useRef({ session });
+  latestRef.current = { session };
 
   const active = configured && Boolean(session) && enabled;
+  const activeRef = useRef(active);
+  activeRef.current = active;
 
   useEffect(() => {
     if (!isTauriRuntime()) return;
@@ -143,57 +111,37 @@ export function useLastfm({
     if (active && queueRef.current.length > 0) void flushQueue();
   }, [active, flushQueue]);
 
-  // Each time a song starts, its listening is counted from zero.
-  useEffect(() => {
-    instanceRef.current = newInstance(trackKey);
-  }, [trackKey]);
-
-  useEffect(() => {
-    if (!active) return;
-    const instance = instanceRef.current;
-    const duration = latestRef.current.activeDuration;
-
-    // The same song again (repeat one / back to the start after finishing).
-    if (instance.scrobbled && playbackTime < 2 && instance.previousTime > duration - 5) {
-      instanceRef.current = newInstance(trackKey);
-    }
-
-    const current = instanceRef.current;
-    if (isPlaying) {
-      current.listened += listenedDelta(current.previousTime, playbackTime);
-      current.startedAt ??= Date.now() / 1000;
-    }
-    current.previousTime = playbackTime;
-
-    const { selectedTrack: track, session: currentSession } = latestRef.current;
-    if (!currentSession) return;
-
-    // After the first second, so the duration already belongs to this song.
-    if (isPlaying && playbackTime >= 1 && !current.nowPlayingSent && isScrobbleEligible(duration)) {
+  /** "Now playing" on the profile (called by the listen tracker). */
+  const nowPlaying = useCallback(
+    (track: LibraryTrack, duration: number) => {
+      const current = latestRef.current.session;
+      if (!activeRef.current || !current) return;
       const item = buildScrobbleItem(track, duration, Date.now() / 1000);
-      current.nowPlayingSent = true;
-      if (item) {
-        void invoke("lastfm_now_playing", {
-          album: item.album ?? null,
-          artist: item.artist,
-          duration: item.duration ?? null,
-          sessionKey: currentSession.key,
-          track: item.track,
-        }).catch((error) => {
-          if (classifyLastfmError(error) === "invalid-session") disconnect();
-        });
-      }
-    }
+      if (!item) return;
+      void invoke("lastfm_now_playing", {
+        album: item.album ?? null,
+        artist: item.artist,
+        duration: item.duration ?? null,
+        sessionKey: current.key,
+        track: item.track,
+      }).catch((error) => {
+        if (classifyLastfmError(error) === "invalid-session") disconnect();
+      });
+    },
+    [disconnect],
+  );
 
-    if (!current.scrobbled && isScrobbleEligible(duration) && current.listened >= scrobbleThreshold(duration)) {
-      current.scrobbled = true;
-      const item = buildScrobbleItem(track, duration, current.startedAt ?? Date.now() / 1000);
-      if (item) {
-        saveQueue(appendToQueue(queueRef.current, [item]));
-        void flushQueue();
-      }
-    }
-  }, [active, disconnect, flushQueue, isPlaying, playbackTime, trackKey]);
+  /** Queues and sends a counted play (called by the listen tracker). */
+  const scrobble = useCallback(
+    (track: LibraryTrack, duration: number, startedAt: number) => {
+      if (!activeRef.current) return;
+      const item = buildScrobbleItem(track, duration, startedAt);
+      if (!item) return;
+      saveQueue(appendToQueue(queueRef.current, [item]));
+      void flushQueue();
+    },
+    [flushQueue],
+  );
 
   const connect = useCallback(async () => {
     if (!configured) return;
@@ -250,8 +198,12 @@ export function useLastfm({
     connectState,
     disconnect,
     enabled,
+    nowPlaying,
     queueCount,
+    scrobble,
     scrobbledCount,
+    /** Session for other Last.fm features (loved tracks), even with scrobbling paused. */
+    sessionKey: configured ? (session?.key ?? null) : null,
     setEnabled,
     userName: session?.name ?? null,
   };

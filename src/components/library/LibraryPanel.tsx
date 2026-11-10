@@ -1,5 +1,6 @@
 import { getTrackArtworkSrc } from "../../app/utils";
-import { memo, useRef, type MutableRefObject, type RefObject } from "react";
+import { memo, useMemo, useRef, type MutableRefObject, type RefObject } from "react";
+import { HeartButton } from "./HeartButton";
 import { Check, ChevronDown } from "lucide-react";
 import { useShell } from "../layout/ShellContext";
 import { LibraryGroupsGrid } from "./LibraryGroupsGrid";
@@ -121,6 +122,10 @@ export function LibraryPanel({
   };
 
   const shell = useShell();
+  const heartLabels = useMemo(
+    () => ({ add: shell.copy.favoriteAdd, remove: shell.copy.favoriteRemove }),
+    [shell.copy],
+  );
   const showGroupsGrid = !activePlaylist && !shell.activeGroup && shell.libraryView !== "songs";
   const showSortControl = !activePlaylist && !shell.activeGroup && shell.libraryView === "songs";
   const visibleIndices = displayTrackRows.map(({ index }) => index);
@@ -223,6 +228,7 @@ export function LibraryPanel({
           displayTrackRows.map(({ track, index }, displayIndex) => (
             <LibraryTrackRow
               deleteLabel={copy.trackMenuDelete}
+              heartLabels={heartLabels}
               displayNumber={activePlaylist ? index + 1 : displayIndex + 1}
               editLabel={copy.trackMenuEditMeta}
               handlersRef={rowHandlersRef}
@@ -273,6 +279,7 @@ type LibraryTrackRowProps = {
   deleteLabel: string;
   displayNumber: number;
   editLabel: string;
+  heartLabels: { add: string; remove: string };
   handlersRef: MutableRefObject<LibraryRowHandlers>;
   ignoreNextRowClickRef: { current: boolean };
   index: number;
@@ -290,6 +297,7 @@ const LibraryTrackRow = memo(function LibraryTrackRow({
   deleteLabel,
   displayNumber,
   editLabel,
+  heartLabels,
   handlersRef,
   ignoreNextRowClickRef,
   index,
@@ -383,6 +391,7 @@ const LibraryTrackRow = memo(function LibraryTrackRow({
         className="track-options-wrap"
         ref={isMenuOpen ? trackMenuRef : null}
       >
+        <HeartButton artist={track.artist} className="row-heart" labels={heartLabels} size={15} title={track.title} />
         <button
           aria-label={`Opciones de ${track.title}`}
           className="track-options-button"
