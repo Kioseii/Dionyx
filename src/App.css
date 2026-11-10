@@ -4105,6 +4105,9 @@ button {
   overflow: hidden;
   user-select: none;
   cursor: default;
+  /* The mini player lives outside .app-shell, so it does not inherit the
+     app font (it fell back to the browser's serif); use the chosen one. */
+  font-family: var(--app-font-family);
 }
 
 .mp-main-row {
