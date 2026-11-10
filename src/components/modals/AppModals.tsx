@@ -2,7 +2,17 @@ import { ModalFrame } from "./ModalFrame";
 import { createPortal } from "react-dom";
 import { useShell } from "../layout/ShellContext";
 import { AppearancePreview } from "../pages/AppearancePreview";
-import { AboutSettingsCard, DuplicatesSettingsCard, LastfmSettingsCard, LibrarySettingsCard, PlaybackSettingsCard, ShortcutsSettingsCard } from "../pages/SettingsCards";
+import {
+  AboutSettingsCard,
+  DuplicatesSettingsCard,
+  LastfmSettingsCard,
+  LibrarySettingsCard,
+  MiniPlayerSettingsCard,
+  PlaybackSettingsCard,
+  SettingsNav,
+  SettingsSection,
+  ShortcutsSettingsCard,
+} from "../pages/SettingsCards";
 import type { ChangeEvent, RefObject } from "react";
 import { Check, ChevronDown } from "lucide-react";
 import { defaultThemeColor, equalizerPresets, fontPresets, themePresets } from "../../app/constants";
@@ -460,137 +470,153 @@ export function PersonalizationModal({
       </header>
 
       {isSettingsPage ? (
-            <div className="settings-panel">
-              <LibrarySettingsCard />
-              <div className="settings-card">
-                <strong>{copy.hideOnTrayLabel}</strong>
-                <p className="muted settings-copy">{copy.hideOnTrayHint}</p>
-                <button
-                  className={`settings-toggle ${hideOnTray ? "active" : ""}`}
-                  onClick={() => {
-                    onHideOnTrayChange(!hideOnTray);
-                  }}
-                  role="switch"
-                  aria-checked={hideOnTray}
-                  type="button"
-                >
-                  <span className="settings-toggle-thumb" />
-                </button>
-              </div>
-
-              <PlaybackSettingsCard />
-              <ShortcutsSettingsCard />
-              <LastfmSettingsCard />
-              <DuplicatesSettingsCard />
-
-              <div className="settings-card settings-card--tools">
-                <span className="font-preset-label">{appLanguage === "es" ? toolsCopy.toolsEs : toolsCopy.toolsEn}</span>
-                <strong>{appLanguage === "es" ? toolsCopy.toolsTitleEs : toolsCopy.toolsTitleEn}</strong>
-                <p className="muted settings-copy">
-                  {appLanguage === "es" ? toolsCopy.toolsHintEs : toolsCopy.toolsHintEn}{" "}
-                  {toolsPlatformHint}
-                </p>
-
-                <div className="settings-tools-rows">
-                  <div className="settings-tool-row">
-                    <span className={`setup-tool-status ${isYtdlpAvailable === null ? "checking" : isYtdlpAvailable ? "ok" : "missing"}`}>
-                      {isYtdlpAvailable === null ? "…" : isYtdlpAvailable ? "✓" : "✗"}
-                    </span>
-                    <div className="settings-tool-info">
-                      <strong>yt-dlp</strong>
-                      {isYtdlpAvailable && ytdlpVersion ? (
-                        <span className="setup-tool-version">{ytdlpVersion}</span>
-                      ) : isYtdlpAvailable ? (
-                        <span className="setup-tool-version">{appLanguage === "es" ? toolsCopy.installedEs : toolsCopy.installedEn}</span>
-                      ) : null}
+            <div className="settings-layout">
+              <SettingsNav />
+              <div className="settings-sections">
+                <SettingsSection id="settings-general" title={shell.copy.settingsGeneral}>
+                  <div className="settings-card">
+                    <span className="font-preset-label">{copy.languageSection}</span>
+                    <strong>{copy.appLanguage}</strong>
+                    <p className="muted settings-copy">{copy.appLanguageHint}</p>
+                    <div className="settings-options">
+                      <button
+                        className={`settings-option ${appLanguage === "es" ? "selected" : ""}`}
+                        onClick={() => {
+                          onLanguageChange("es");
+                        }}
+                        type="button"
+                      >
+                        {copy.spanish}
+                      </button>
+                      <button
+                        className={`settings-option ${appLanguage === "en" ? "selected" : ""}`}
+                        onClick={() => {
+                          onLanguageChange("en");
+                        }}
+                        type="button"
+                      >
+                        {copy.english}
+                      </button>
                     </div>
-                    {!isYtdlpAvailable ? (
-                      isInstallingYtdlp ? (
-                        <div className="settings-tool-progress">
-                          <div className="setup-progress-bar" style={{ width: 120 }}>
-                            <div className="setup-progress-fill" style={{ width: `${ytdlpInstallProgress}%` }} />
-                          </div>
-                          <span className="setup-tool-version">{ytdlpInstallProgress}%</span>
-                        </div>
-                      ) : (
-                        <button className="setup-install-btn" onClick={onYtdlpInstall} type="button">
-                          {appLanguage === "es" ? toolsCopy.installEs : toolsCopy.installEn}
-                        </button>
-                      )
-                    ) : null}
                   </div>
+                  <div className="settings-card">
+                    <strong>{copy.hideOnTrayLabel}</strong>
+                    <p className="muted settings-copy">{copy.hideOnTrayHint}</p>
+                    <button
+                      className={`settings-toggle ${hideOnTray ? "active" : ""}`}
+                      onClick={() => {
+                        onHideOnTrayChange(!hideOnTray);
+                      }}
+                      role="switch"
+                      aria-checked={hideOnTray}
+                      type="button"
+                    >
+                      <span className="settings-toggle-thumb" />
+                    </button>
+                  </div>
+                </SettingsSection>
+                <SettingsSection id="settings-library" title={shell.copy.settingsLibrary}>
+                  <LibrarySettingsCard />
+                  <DuplicatesSettingsCard />
+                </SettingsSection>
+                <SettingsSection id="settings-playback" title={shell.copy.settingsPlaybackSection}>
+                  <PlaybackSettingsCard />
+                </SettingsSection>
+                <SettingsSection id="settings-mini" title={shell.copy.miniPlayer}>
+                  <MiniPlayerSettingsCard />
+                </SettingsSection>
+                <SettingsSection id="settings-lastfm" title="Last.fm">
+                  <LastfmSettingsCard />
+                </SettingsSection>
+                <SettingsSection id="settings-shortcuts" title={shell.copy.shortcutsSection}>
+                  <ShortcutsSettingsCard />
+                </SettingsSection>
+                <SettingsSection id="settings-downloads" title={shell.copy.downloadsNav}>
+                  <div className="settings-card settings-card--tools">
+                    <span className="font-preset-label">{appLanguage === "es" ? toolsCopy.toolsEs : toolsCopy.toolsEn}</span>
+                    <strong>{appLanguage === "es" ? toolsCopy.toolsTitleEs : toolsCopy.toolsTitleEn}</strong>
+                    <p className="muted settings-copy">
+                      {appLanguage === "es" ? toolsCopy.toolsHintEs : toolsCopy.toolsHintEn}{" "}
+                      {toolsPlatformHint}
+                    </p>
 
-                  <div className="settings-tool-row">
-                    <span className={`setup-tool-status ${isFfmpegAvailable === null ? "checking" : isFfmpegAvailable ? "ok" : "missing"}`}>
-                      {isFfmpegAvailable === null ? "…" : isFfmpegAvailable ? "✓" : "✗"}
-                    </span>
-                    <div className="settings-tool-info">
-                      <strong>ffmpeg</strong>
-                      {isFfmpegAvailable ? (
-                        <span className="setup-tool-version">
-                          {ffmpegVersion ?? (appLanguage === "es" ? toolsCopy.installedEs : toolsCopy.installedEn)}
+                    <div className="settings-tools-rows">
+                      <div className="settings-tool-row">
+                        <span className={`setup-tool-status ${isYtdlpAvailable === null ? "checking" : isYtdlpAvailable ? "ok" : "missing"}`}>
+                          {isYtdlpAvailable === null ? "…" : isYtdlpAvailable ? "✓" : "✗"}
                         </span>
-                      ) : null}
-                    </div>
-                    {isFfmpegAvailable === false ? (
-                      isInstallingFfmpeg ? (
-                        <div className="settings-tool-progress">
-                          <div className="setup-progress-bar" style={{ width: 120 }}>
-                            <div className="setup-progress-fill" style={{ width: `${ffmpegInstallProgress > 0 ? ffmpegInstallProgress : 30}%` }} />
-                          </div>
+                        <div className="settings-tool-info">
+                          <strong>yt-dlp</strong>
+                          {isYtdlpAvailable && ytdlpVersion ? (
+                            <span className="setup-tool-version">{ytdlpVersion}</span>
+                          ) : isYtdlpAvailable ? (
+                            <span className="setup-tool-version">{appLanguage === "es" ? toolsCopy.installedEs : toolsCopy.installedEn}</span>
+                          ) : null}
                         </div>
-                      ) : (
-                        <button className="setup-install-btn" onClick={onFfmpegInstall} type="button">
-                          {appLanguage === "es" ? toolsCopy.installEs : toolsCopy.installEn}
-                        </button>
-                      )
+                        {!isYtdlpAvailable ? (
+                          isInstallingYtdlp ? (
+                            <div className="settings-tool-progress">
+                              <div className="setup-progress-bar" style={{ width: 120 }}>
+                                <div className="setup-progress-fill" style={{ width: `${ytdlpInstallProgress}%` }} />
+                              </div>
+                              <span className="setup-tool-version">{ytdlpInstallProgress}%</span>
+                            </div>
+                          ) : (
+                            <button className="setup-install-btn" onClick={onYtdlpInstall} type="button">
+                              {appLanguage === "es" ? toolsCopy.installEs : toolsCopy.installEn}
+                            </button>
+                          )
+                        ) : null}
+                      </div>
+
+                      <div className="settings-tool-row">
+                        <span className={`setup-tool-status ${isFfmpegAvailable === null ? "checking" : isFfmpegAvailable ? "ok" : "missing"}`}>
+                          {isFfmpegAvailable === null ? "…" : isFfmpegAvailable ? "✓" : "✗"}
+                        </span>
+                        <div className="settings-tool-info">
+                          <strong>ffmpeg</strong>
+                          {isFfmpegAvailable ? (
+                            <span className="setup-tool-version">
+                              {ffmpegVersion ?? (appLanguage === "es" ? toolsCopy.installedEs : toolsCopy.installedEn)}
+                            </span>
+                          ) : null}
+                        </div>
+                        {isFfmpegAvailable === false ? (
+                          isInstallingFfmpeg ? (
+                            <div className="settings-tool-progress">
+                              <div className="setup-progress-bar" style={{ width: 120 }}>
+                                <div className="setup-progress-fill" style={{ width: `${ffmpegInstallProgress > 0 ? ffmpegInstallProgress : 30}%` }} />
+                              </div>
+                            </div>
+                          ) : (
+                            <button className="setup-install-btn" onClick={onFfmpegInstall} type="button">
+                              {appLanguage === "es" ? toolsCopy.installEs : toolsCopy.installEn}
+                            </button>
+                          )
+                        ) : null}
+                      </div>
+                    </div>
+
+                    {(ytdlpInstallError || ffmpegInstallError) ? (
+                      <p className="setup-tool-error">
+                        {ytdlpInstallError ?? ffmpegInstallError}
+                      </p>
                     ) : null}
+
+                    <button
+                      className="setup-recheck-btn"
+                      onClick={onRecheckDeps}
+                      style={{ alignSelf: "flex-start", marginTop: 2 }}
+                      type="button"
+                    >
+                      ↻ {appLanguage === "es" ? toolsCopy.recheckEs : toolsCopy.recheckEn}
+                    </button>
                   </div>
-                </div>
-
-                {(ytdlpInstallError || ffmpegInstallError) ? (
-                  <p className="setup-tool-error">
-                    {ytdlpInstallError ?? ffmpegInstallError}
-                  </p>
-                ) : null}
-
-                <button
-                  className="setup-recheck-btn"
-                  onClick={onRecheckDeps}
-                  style={{ alignSelf: "flex-start", marginTop: 2 }}
-                  type="button"
-                >
-                  ↻ {appLanguage === "es" ? toolsCopy.recheckEs : toolsCopy.recheckEn}
-                </button>
+                </SettingsSection>
+                <SettingsSection id="settings-about" title={shell.copy.settingsAboutSection}>
+                  <AboutSettingsCard />
+                </SettingsSection>
               </div>
-
-              <div className="settings-card">
-                <span className="font-preset-label">{copy.languageSection}</span>
-                <strong>{copy.appLanguage}</strong>
-                <p className="muted settings-copy">{copy.appLanguageHint}</p>
-                <div className="settings-options">
-                  <button
-                    className={`settings-option ${appLanguage === "es" ? "selected" : ""}`}
-                    onClick={() => {
-                      onLanguageChange("es");
-                    }}
-                    type="button"
-                  >
-                    {copy.spanish}
-                  </button>
-                  <button
-                    className={`settings-option ${appLanguage === "en" ? "selected" : ""}`}
-                    onClick={() => {
-                      onLanguageChange("en");
-                    }}
-                    type="button"
-                  >
-                    {copy.english}
-                  </button>
-                </div>
-              </div>
-
-              <AboutSettingsCard />
             </div>
       ) : (
         <div className="page-columns appearance-layout">
