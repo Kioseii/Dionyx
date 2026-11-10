@@ -12,7 +12,6 @@ type UseMainStageHostOptionsInput = {
   activeDiscoverPreviewKey: MainStageOptions["discoverPanelProps"]["activeDiscoverPreviewKey"];
   appLanguage: MainStageOptions["libraryPanelProps"]["appLanguage"];
   directoryInputRef: MainStageOptions["topBarProps"]["directoryInputRef"];
-  discoverCharts: MainStageOptions["discoverPanelProps"]["discoverCharts"];
   discoverError: MainStageOptions["discoverPanelProps"]["discoverError"];
   discoverForYou: MainStageOptions["discoverPanelProps"]["discoverForYou"];
   discoverForYouPageCount: MainStageOptions["discoverPanelProps"]["discoverForYouPageCount"];
@@ -88,7 +87,6 @@ export function useMainStageHostOptions({
   activeDiscoverPreviewKey,
   appLanguage,
   directoryInputRef,
-  discoverCharts,
   discoverError,
   discoverForYou,
   discoverForYouPageCount,
@@ -180,7 +178,6 @@ export function useMainStageHostOptions({
     },
     discoverPanelProps: {
       activeDiscoverPreviewKey,
-      discoverCharts,
       discoverError,
       discoverForYou,
       discoverForYouPageCount,

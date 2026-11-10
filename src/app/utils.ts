@@ -1,4 +1,5 @@
 import type { CSSProperties } from "react";
+import { convertFileSrc } from "@tauri-apps/api/core";
 import {
   brandName,
   defaultEqualizerValues,
@@ -45,16 +46,33 @@ export function readStoredValue(key: string) {
   }
 }
 
-export function writeStoredValue(key: string, value: string) {
+/** Returns false when the value could not be stored (e.g. quota exceeded). */
+export function writeStoredValue(key: string, value: string): boolean {
   if (typeof window === "undefined") {
-    return;
+    return false;
   }
 
   try {
     window.localStorage.setItem(key, value);
+    return true;
   } catch {
-    // Ignore storage issues and keep the app usable.
+    // Keep the app usable; callers that care can react to the false result.
+    return false;
   }
+}
+
+/**
+ * Serializes playlists without heavy or session-only fields: embedded artwork
+ * (base64 data URLs can be hundreds of KB per track) and blob: sources from the
+ * browser picker, which are dead after a restart.
+ */
+export function serializePlaylistsForStorage(playlists: SavedPlaylist[]) {
+  return JSON.stringify(
+    playlists.map((playlist) => ({
+      ...playlist,
+      tracks: playlist.tracks.map(({ artworkDataUrl: _artwork, source: _source, ...track }) => track),
+    })),
+  );
 }
 
 export function removeStoredValue(key: string) {
@@ -67,31 +85,6 @@ export function removeStoredValue(key: string) {
   } catch {
     // Ignore storage issues and keep the app usable.
   }
-}
-
-export function clampToDesktopBounds(
-  x: number,
-  y: number,
-  width: number,
-  height: number,
-  monitors: Array<{
-    position: { x: number; y: number };
-    size: { width: number; height: number };
-  }>,
-) {
-  if (monitors.length === 0) {
-    return { x, y };
-  }
-
-  const minX = Math.min(...monitors.map((monitor) => monitor.position.x));
-  const minY = Math.min(...monitors.map((monitor) => monitor.position.y));
-  const maxX = Math.max(...monitors.map((monitor) => monitor.position.x + monitor.size.width));
-  const maxY = Math.max(...monitors.map((monitor) => monitor.position.y + monitor.size.height));
-
-  return {
-    x: Math.min(Math.max(x, minX), Math.max(minX, maxX - width)),
-    y: Math.min(Math.max(y, minY), Math.max(minY, maxY - height)),
-  };
 }
 
 export function parseStoredPlaylists(rawValue: string | null): SavedPlaylist[] {
@@ -176,8 +169,24 @@ export function sanitizeTrack(track: LibraryTrack): LibraryTrack {
         .toUpperCase() || "--",
     quality: sanitizePlainTextInput(track.quality, 48).trim() || "Local",
     duration: /^[0-9]{1,3}:[0-9]{2}$/.test(track.duration) ? track.duration : "--:--",
+    artworkPath: typeof track.artworkPath === "string" && track.artworkPath ? track.artworkPath : undefined,
+    modifiedAt:
+      typeof track.modifiedAt === "number" && Number.isFinite(track.modifiedAt) ? track.modifiedAt : undefined,
     artworkDataUrl: safeArtworkDataUrl,
   };
+}
+
+/** Image URL for a track's cover, or null when it has none. */
+export function getTrackArtworkSrc(track: LibraryTrack): string | null {
+  if (track.artworkDataUrl) {
+    return track.artworkDataUrl;
+  }
+
+  if (track.artworkPath && isTauriRuntime()) {
+    return convertFileSrc(track.artworkPath);
+  }
+
+  return null;
 }
 
 export function getTrackKey(track: LibraryTrack) {
@@ -374,6 +383,25 @@ export function getFontPresetById(id: string) {
   return fontPresets.find((preset) => preset.id === id) ?? fontPresets[0];
 }
 
+/** WCAG relative luminance of an sRGB color (0 = black, 1 = white). */
+export function relativeLuminance(rgb: { g: number; r: number; b: number }) {
+  const channel = (value: number) => {
+    const c = value / 255;
+    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  };
+
+  return 0.2126 * channel(rgb.r) + 0.7152 * channel(rgb.g) + 0.0722 * channel(rgb.b);
+}
+
+/**
+ * Text/icon color for content drawn on the accent color. Light text stays the
+ * default (the original look on dark accents); light accents (white, pastel,
+ * yellow, light grey) switch to dark text, which white could not be read on.
+ */
+export function getOnAccentColor(accent: { g: number; r: number; b: number }) {
+  return relativeLuminance(accent) > 0.4 ? "#14101c" : "#fefbff";
+}
+
 export function buildThemeStyle(themeColor: string, fontPreset: FontPreset) {
   const accentBase = hexToRgb(themeColor);
   const accentSoft = mixRgb(accentBase, { r: 255, g: 255, b: 255 }, 0.34);
@@ -391,6 +419,7 @@ export function buildThemeStyle(themeColor: string, fontPreset: FontPreset) {
     "--text-soft-rgb": rgbToCss(textSoft),
     "--text-faint-rgb": rgbToCss(textFaint),
     "--text-bright-rgb": rgbToCss(textBright),
+    "--on-accent": getOnAccentColor(accentBase),
     "--app-font-family": fontPreset.bodyFamily,
     "--display-font-family": fontPreset.displayFamily,
   } as CSSProperties;
@@ -498,6 +527,7 @@ export function trackFromBrowserFile(file: File, collectionName: string): Librar
     quality: inferTrackQuality(format, file.size),
     duration: "--:--",
     path: relativePath,
+    modifiedAt: Math.floor(file.lastModified / 1000),
     source: URL.createObjectURL(file),
   };
 }

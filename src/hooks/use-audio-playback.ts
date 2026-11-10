@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import type { MutableRefObject, RefObject, SyntheticEvent } from "react";
+import { waitForPlaybackGate } from "../app/playback-gate";
 
 type UseAudioPlaybackOptions = {
   activeDuration: number;
@@ -9,6 +10,8 @@ type UseAudioPlaybackOptions = {
   clearPendingSourceSwap: () => void;
   ensureEqualizerGraph: () => Promise<boolean>;
   isEqualizerEnabled: boolean;
+  recoverFromSourceError: (onGiveUp: () => void) => boolean;
+  resumeEqualizerGraph: () => Promise<boolean>;
   isPlaying: boolean;
   isSwappingSourceRef: MutableRefObject<boolean>;
   isTransitioningTrackRef: MutableRefObject<boolean>;
@@ -35,7 +38,9 @@ export function useAudioPlayback({
   isTransitioningTrackRef,
   pendingResumePlaybackRef,
   pendingResumeTimeRef,
+  recoverFromSourceError,
   resolvedTrackSource,
+  resumeEqualizerGraph,
   selectedTrackTitle,
   setActiveDuration,
   setIsPlaying,
@@ -43,6 +48,17 @@ export function useAudioPlayback({
   setStatusMessage,
   updateSelectedTrackDuration,
 }: UseAudioPlaybackOptions) {
+  /**
+   * Gets the audio path ready before play(): builds the EQ graph when the EQ is
+   * on, and otherwise just resumes an existing graph's context (once attached,
+   * the element is silent while that context is suspended).
+   */
+  function prepareAudioOutput() {
+    return isEqualizerEnabled && canUseEqualizerOnResolvedSource(resolvedTrackSource)
+      ? ensureEqualizerGraph()
+      : resumeEqualizerGraph();
+  }
+
   function reportPlaybackError() {
     setIsPlaying(false);
     setStatusMessage(
@@ -72,34 +88,26 @@ export function useAudioPlayback({
       return;
     }
 
-    if (isEqualizerEnabled && canUseEqualizerOnResolvedSource(resolvedTrackSource)) {
-      void ensureEqualizerGraph().then((graphReady) => {
-        if (!graphReady) {
-          reportPlaybackError();
-          return;
-        }
+    void prepareAudioOutput().then(async (outputReady) => {
+      if (!outputReady) {
+        reportPlaybackError();
+        return;
+      }
 
-        void audio.play().catch(() => {
-          reportPlaybackError();
-        });
+      // Gapless: the end of the previous song may still be playing on the
+      // tail element; start right when it finishes (or not at all if cancelled).
+      if (!(await waitForPlaybackGate())) {
+        return;
+      }
+
+      void audio.play().catch(() => {
+        reportPlaybackError();
       });
-      return;
-    }
-
-    void audio.play().catch(() => {
-      reportPlaybackError();
     });
-  }, [
-    appLanguage,
-    audioRef,
-    canUseEqualizerOnResolvedSource,
-    ensureEqualizerGraph,
-    isEqualizerEnabled,
-    isPlaying,
-    isSwappingSourceRef,
-    resolvedTrackSource,
-    selectedTrackTitle,
-  ]);
+  // All callbacks used here are stable; re-run only when playback intent,
+  // the source or the EQ switch change (not on every timeupdate render).
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [audioRef, isEqualizerEnabled, isPlaying, resolvedTrackSource]);
 
   async function togglePlayback() {
     const audio = audioRef.current;
@@ -123,13 +131,11 @@ export function useAudioPlayback({
       return;
     }
 
-    if (isEqualizerEnabled && canUseEqualizerOnResolvedSource(resolvedTrackSource)) {
-      const graphReady = await ensureEqualizerGraph();
+    const outputReady = await prepareAudioOutput();
 
-      if (!graphReady) {
-        reportPlaybackError();
-        return;
-      }
+    if (!outputReady) {
+      reportPlaybackError();
+      return;
     }
 
     try {
@@ -161,9 +167,11 @@ export function useAudioPlayback({
       clearPendingSourceSwap();
 
       if (shouldResumePlayback) {
-        void audioElement.play().catch(() => {
-          reportPlaybackError();
-        });
+        void prepareAudioOutput().then(() =>
+          audioElement.play().catch(() => {
+            reportPlaybackError();
+          }),
+        );
       }
     }
   }
@@ -181,6 +189,16 @@ export function useAudioPlayback({
   }
 
   function handleAudioError() {
+    // A CORS-mode load can fail on some webviews: retry this track from a
+    // blob copy before telling the user anything.
+    if (recoverFromSourceError(reportSourceError)) {
+      return;
+    }
+
+    reportSourceError();
+  }
+
+  function reportSourceError() {
     clearPendingSourceSwap();
     setIsPlaying(false);
     setStatusMessage(

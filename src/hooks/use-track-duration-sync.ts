@@ -18,23 +18,38 @@ export function useTrackDurationSync({
     const formatted = formatTime(seconds);
     const trackKey = getTrackKey(selectedTrack);
 
-    setTracks((previousTracks) =>
-      previousTracks.map((track) =>
-        getTrackKey(track) === trackKey && track.duration !== formatted
-          ? { ...track, duration: formatted }
-          : track,
-      ),
-    );
-    setSavedPlaylists((previousPlaylists) =>
-      previousPlaylists.map((playlist) => ({
-        ...playlist,
-        tracks: playlist.tracks.map((track) =>
-          getTrackKey(track) === trackKey && track.duration !== formatted
-            ? { ...track, duration: formatted }
-            : track,
-        ),
-      })),
-    );
+    // Return the previous arrays when nothing changes, so state consumers (and
+    // the playlist persistence effect) are not triggered on every track load.
+    const withDuration = (list: LibraryTrack[]) => {
+      let changed = false;
+      const next = list.map((track) => {
+        if (getTrackKey(track) === trackKey && track.duration !== formatted) {
+          changed = true;
+          return { ...track, duration: formatted };
+        }
+
+        return track;
+      });
+
+      return changed ? next : list;
+    };
+
+    setTracks((previousTracks) => withDuration(previousTracks));
+    setSavedPlaylists((previousPlaylists) => {
+      let changed = false;
+      const next = previousPlaylists.map((playlist) => {
+        const tracks = withDuration(playlist.tracks);
+
+        if (tracks === playlist.tracks) {
+          return playlist;
+        }
+
+        changed = true;
+        return { ...playlist, tracks };
+      });
+
+      return changed ? next : previousPlaylists;
+    });
   }
 
   return {

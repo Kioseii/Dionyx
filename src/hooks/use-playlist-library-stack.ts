@@ -5,6 +5,7 @@ import { useLibraryViewModel } from "./use-library-view-model";
 import { usePlaybackNavigation } from "./use-playback-navigation";
 import { usePlaylistPlayback } from "./use-playlist-playback";
 import { usePlaylists } from "./use-playlists";
+import { useStableTrackSelection } from "./use-stable-track-selection";
 
 type UsePlaylistLibraryStackOptions = {
   activeDuration: number;
@@ -13,10 +14,12 @@ type UsePlaylistLibraryStackOptions = {
   audioRef: RefObject<HTMLAudioElement | null>;
   collectionName: string;
   currentTrackIndex: number;
+  currentTrackIndexSetExplicitlyRef: MutableRefObject<boolean>;
   displayTrackIndicesRef: MutableRefObject<number[]>;
   handleSeek: (value: number) => void;
   ignoreNextRowClickRef: MutableRefObject<boolean>;
   isTransitioningTrackRef: MutableRefObject<boolean>;
+  libraryFilterIndices: number[] | null;
   librarySortKey: LibrarySortKey;
   playbackTime: number;
   scannedPath: string | null;
@@ -27,6 +30,7 @@ type UsePlaylistLibraryStackOptions = {
   setIsPlaying: (value: boolean) => void;
   setPlaybackTime: (value: number) => void;
   setStatusMessage: (value: string) => void;
+  syncCurrentTrackIndex: (value: number) => void;
   tracks: LibraryTrack[];
 };
 
@@ -36,11 +40,13 @@ export function usePlaylistLibraryStack({
   audioPreloadRef,
   audioRef,
   collectionName,
-  currentTrackIndex,
+  currentTrackIndex: storedTrackIndex,
+  currentTrackIndexSetExplicitlyRef,
   displayTrackIndicesRef,
   handleSeek,
   ignoreNextRowClickRef,
   isTransitioningTrackRef,
+  libraryFilterIndices,
   librarySortKey,
   playbackTime,
   scannedPath,
@@ -51,6 +57,7 @@ export function usePlaylistLibraryStack({
   setIsPlaying,
   setPlaybackTime,
   setStatusMessage,
+  syncCurrentTrackIndex,
   tracks,
 }: UsePlaylistLibraryStackOptions) {
   const playlists = usePlaylists({
@@ -59,6 +66,15 @@ export function usePlaylistLibraryStack({
     scannedPath,
     setStatusMessage,
     tracks,
+  });
+
+  // Everything below works with the index of the track that is actually
+  // current, even in the render where the list changed under it.
+  const currentTrackIndex = useStableTrackSelection({
+    currentTrackIndex: storedTrackIndex,
+    indexSetExplicitlyRef: currentTrackIndexSetExplicitlyRef,
+    playbackTracks: playlists.playbackTracks,
+    syncCurrentTrackIndex,
   });
 
   const playbackNavigation = usePlaybackNavigation({
@@ -70,6 +86,7 @@ export function usePlaylistLibraryStack({
     displayTrackIndicesRef,
     handleSeek,
     isTransitioningTrackRef,
+    libraryTrackCount: tracks.length,
     librarySortKey,
     playbackPlaylistId: playlists.playbackPlaylistId,
     playbackTime,
@@ -86,6 +103,7 @@ export function usePlaylistLibraryStack({
     appLanguage,
     currentTrackIndex,
     displayTrackIndicesRef,
+    libraryFilterIndices,
     librarySortKey,
     playbackQueue: playbackNavigation.playbackQueue,
     playbackTracks: playlists.playbackTracks,
@@ -130,6 +148,7 @@ export function usePlaylistLibraryStack({
   });
 
   return {
+    currentTrackIndex,
     ...playlists,
     ...playbackNavigation,
     ...libraryViewModel,

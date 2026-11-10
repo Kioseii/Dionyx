@@ -16,7 +16,8 @@ type KuromojiAnalyzerConstructor = new (options?: { dictPath?: string }) => unkn
 
 declare global {
   interface Window {
-    Kuroshiro?: KuroshiroConstructor;
+    /** The vendored UMD build puts the class under `.default`. */
+    Kuroshiro?: KuroshiroConstructor | { default?: KuroshiroConstructor };
     KuromojiAnalyzer?: KuromojiAnalyzerConstructor;
   }
 }

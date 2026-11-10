@@ -3,6 +3,8 @@ import { DiscoverPanel } from "../discover/DiscoverPanel";
 import { LibraryPanel } from "../library/LibraryPanel";
 import { DetailPanel } from "../player/DetailPanel";
 import { LibraryStatusBanner } from "./LibraryStatusBanner";
+import { HomePage } from "../pages/HomePage";
+import { useShell } from "./ShellContext";
 import { TopBar } from "./TopBar";
 
 export type AppMainStageHostProps = {
@@ -22,17 +24,30 @@ export function AppMainStageHost({
   libraryStatusBannerProps,
   topBarProps,
 }: AppMainStageHostProps) {
+  const { activePage, detailPanelOpen, onPageRootChange } = useShell();
+
   return (
     <section className="main-stage">
       <TopBar {...topBarProps} />
 
       <LibraryStatusBanner {...libraryStatusBannerProps} />
 
-      {isDiscoverView ? <DiscoverPanel {...discoverPanelProps} /> : null}
+      {/* Pages (Home, Downloads, Appearance, Settings) render here; the
+          download and personalization screens arrive through portals. */}
+      {activePage ? (
+        <div className="shell-page-root" ref={onPageRootChange}>
+          {activePage === "home" ? <HomePage /> : null}
+        </div>
+      ) : null}
 
-      <section className="content-grid" style={isDiscoverView ? { display: "none" } : undefined}>
+      {isDiscoverView && !activePage ? <DiscoverPanel {...discoverPanelProps} /> : null}
+
+      <section
+        className={`content-grid${detailPanelOpen ? "" : " content-grid--no-detail"}`}
+        style={isDiscoverView || activePage ? { display: "none" } : undefined}
+      >
         <LibraryPanel {...libraryPanelProps} />
-        <DetailPanel {...detailPanelProps} />
+        {detailPanelOpen ? <DetailPanel {...detailPanelProps} /> : null}
       </section>
     </section>
   );

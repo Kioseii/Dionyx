@@ -138,7 +138,7 @@ function normalizeLyricsLineText(value: string) {
     .trim();
 }
 
-function parseSyncedLyrics(lyrics: string): LyricsLine[] {
+export function parseSyncedLyrics(lyrics: string): LyricsLine[] {
   const parsedLines: LyricsLine[] = [];
   const rawLines = lyrics.split(/\r?\n/);
 
@@ -174,7 +174,7 @@ function parseSyncedLyrics(lyrics: string): LyricsLine[] {
   return parsedLines.sort((left, right) => (left.startTimeMs ?? 0) - (right.startTimeMs ?? 0));
 }
 
-function parsePlainLyrics(lyrics: string): LyricsLine[] {
+export function parsePlainLyrics(lyrics: string): LyricsLine[] {
   return lyrics
     .split(/\r?\n/)
     .map((line, index) => ({
@@ -298,8 +298,19 @@ async function ensureKuroshiroInstance() {
         throw new Error("lyrics-converter-unavailable");
       }
 
-      const instance = new window.Kuroshiro();
-      const dictPath = new URL("kuromoji-dict/", baseUrl).toString();
+      // The vendored UMD bundle exposes the class as `Kuroshiro.default`.
+      const KuroshiroClass =
+        typeof window.Kuroshiro === "function" ? window.Kuroshiro : window.Kuroshiro.default;
+
+      if (typeof KuroshiroClass !== "function") {
+        throw new Error("lyrics-converter-unavailable");
+      }
+
+      const instance = new KuroshiroClass();
+      // Root-relative on purpose: kuromoji joins this with file names using a
+      // filesystem-style path.join, which mangles "http://host/..." into a
+      // relative "host/..." URL (the request then returns the app's HTML).
+      const dictPath = `${new URL(baseUrl).pathname.replace(/\/?$/, "/")}kuromoji-dict/`;
       await instance.init(new window.KuromojiAnalyzer({ dictPath }));
       return instance;
     })().catch((error) => {
@@ -374,21 +385,73 @@ function getActiveLyricsLineIndex(lines: LyricsLine[], displayedPlaybackTime: nu
   return activeIndex;
 }
 
+const IDLE_LYRICS: TrackLyricsResult = {
+  hasRomanji: false,
+  isInstrumental: false,
+  isSynced: false,
+  lines: [],
+  sourceLabel: "LRCLIB",
+  status: "idle",
+};
+
+/**
+ * Shared across every component that shows lyrics (side panel, full-screen
+ * view): one LRCLIB request per track, not one per mounted view. Errors are
+ * not cached, so a later attempt can retry.
+ */
+const lyricsResultCache = new Map<string, TrackLyricsResult>();
+const lyricsInFlight = new Map<string, Promise<TrackLyricsResult>>();
+
+async function loadTrackLyrics(selectedTrack: LibraryTrack, durationSeconds: number): Promise<TrackLyricsResult> {
+  const candidate = await getLyricsCandidate(selectedTrack, durationSeconds);
+
+  if (!candidate) {
+    return { ...IDLE_LYRICS, status: "empty" };
+  }
+
+  const parsedSyncedLines = candidate.syncedLyrics ? parseSyncedLyrics(candidate.syncedLyrics) : [];
+  const parsedPlainLines =
+    parsedSyncedLines.length === 0 && candidate.plainLyrics
+      ? parsePlainLyrics(candidate.plainLyrics)
+      : [];
+  const parsedLines = parsedSyncedLines.length > 0 ? parsedSyncedLines : parsedPlainLines;
+  const withRomanji = await addRomanjiToLyrics(parsedLines);
+
+  return {
+    hasRomanji: withRomanji.some((line) => Boolean(line.romaji)),
+    isInstrumental: Boolean(candidate.instrumental),
+    isSynced: parsedSyncedLines.length > 0,
+    lines: withRomanji,
+    sourceLabel: "LRCLIB",
+    status: withRomanji.length > 0 || candidate.instrumental ? "ready" : "empty",
+  };
+}
+
+function getSharedLyrics(cacheKey: string, selectedTrack: LibraryTrack, durationSeconds: number) {
+  let pending = lyricsInFlight.get(cacheKey);
+
+  if (!pending) {
+    pending = loadTrackLyrics(selectedTrack, durationSeconds)
+      .then((loaded) => {
+        lyricsResultCache.set(cacheKey, loaded);
+        return loaded;
+      })
+      .finally(() => {
+        lyricsInFlight.delete(cacheKey);
+      });
+    lyricsInFlight.set(cacheKey, pending);
+  }
+
+  return pending;
+}
+
 export function useTrackLyrics({
   activeDuration,
   displayedPlaybackTime,
   selectedTrack,
 }: UseTrackLyricsOptions) {
-  const cacheRef = useRef(new Map<string, TrackLyricsResult>());
   const requestIdRef = useRef(0);
-  const [result, setResult] = useState<TrackLyricsResult>({
-    hasRomanji: false,
-    isInstrumental: false,
-    isSynced: false,
-    lines: [],
-    sourceLabel: "LRCLIB",
-    status: "idle",
-  });
+  const [result, setResult] = useState<TrackLyricsResult>(IDLE_LYRICS);
 
   const durationSeconds = useMemo(
     () => getLyricsTrackDuration(activeDuration, selectedTrack),
@@ -401,18 +464,11 @@ export function useTrackLyrics({
 
   useEffect(() => {
     if (!selectedTrack.path && !selectedTrack.source) {
-      setResult({
-        hasRomanji: false,
-        isInstrumental: false,
-        isSynced: false,
-        lines: [],
-        sourceLabel: "LRCLIB",
-        status: "idle",
-      });
+      setResult(IDLE_LYRICS);
       return;
     }
 
-    const cached = cacheRef.current.get(cacheKey);
+    const cached = lyricsResultCache.get(cacheKey);
     if (cached) {
       setResult(cached);
       return;
@@ -426,68 +482,17 @@ export function useTrackLyrics({
       status: "loading",
     }));
 
-    void (async () => {
-      try {
-        const candidate = await getLyricsCandidate(selectedTrack, durationSeconds);
-
-        if (requestId !== requestIdRef.current) {
-          return;
+    getSharedLyrics(cacheKey, selectedTrack, durationSeconds)
+      .then((loaded) => {
+        if (requestId === requestIdRef.current) {
+          setResult(loaded);
         }
-
-        if (!candidate) {
-          const emptyResult: TrackLyricsResult = {
-            hasRomanji: false,
-            isInstrumental: false,
-            isSynced: false,
-            lines: [],
-            sourceLabel: "LRCLIB",
-            status: "empty",
-          };
-          cacheRef.current.set(cacheKey, emptyResult);
-          setResult(emptyResult);
-          return;
+      })
+      .catch(() => {
+        if (requestId === requestIdRef.current) {
+          setResult({ ...IDLE_LYRICS, status: "error" });
         }
-
-        const parsedSyncedLines = candidate.syncedLyrics ? parseSyncedLyrics(candidate.syncedLyrics) : [];
-        const parsedPlainLines =
-          parsedSyncedLines.length === 0 && candidate.plainLyrics
-            ? parsePlainLyrics(candidate.plainLyrics)
-            : [];
-        const parsedLines = parsedSyncedLines.length > 0 ? parsedSyncedLines : parsedPlainLines;
-        const withRomanji = await addRomanjiToLyrics(parsedLines);
-
-        if (requestId !== requestIdRef.current) {
-          return;
-        }
-
-        const readyResult: TrackLyricsResult = {
-          hasRomanji: withRomanji.some((line) => Boolean(line.romaji)),
-          isInstrumental: Boolean(candidate.instrumental),
-          isSynced: parsedSyncedLines.length > 0,
-          lines: withRomanji,
-          sourceLabel: "LRCLIB",
-          status:
-            withRomanji.length > 0 || candidate.instrumental
-              ? "ready"
-              : "empty",
-        };
-        cacheRef.current.set(cacheKey, readyResult);
-        setResult(readyResult);
-      } catch {
-        if (requestId !== requestIdRef.current) {
-          return;
-        }
-
-        setResult({
-          hasRomanji: false,
-          isInstrumental: false,
-          isSynced: false,
-          lines: [],
-          sourceLabel: "LRCLIB",
-          status: "error",
-        });
-      }
-    })();
+      });
   }, [cacheKey, durationSeconds, selectedTrack]);
 
   return {

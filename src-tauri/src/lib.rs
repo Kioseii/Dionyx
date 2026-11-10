@@ -15,6 +15,8 @@ use std::{
 };
 use tauri::Manager;
 
+mod lastfm;
+
 // ── Discord Rich Presence (custom IPC — supports activity type 2 "Listening") ──
 
 const DISCORD_CLIENT_ID: &str = "1518467237512609883";
@@ -57,9 +59,19 @@ fn discord_connect() -> Option<DiscordPipe> {
                 })
                 .to_string();
                 if discord_write(&mut f, 0, &hs).is_ok() {
-                    // Read handshake response (ignore content)
-                    let _ = discord_read(&mut f);
-                    return Some(DiscordPipe(f));
+                    // Wait briefly for the READY response without ever blocking
+                    // indefinitely: a client that never answers must not hang
+                    // the command (and the mutex) forever.
+                    for _ in 0..20 {
+                        match discord_bytes_available(&f) {
+                            None => break,
+                            Some(0) => std::thread::sleep(Duration::from_millis(100)),
+                            Some(_) => break,
+                        }
+                    }
+                    if discord_drain(&mut f).is_ok() {
+                        return Some(DiscordPipe(f));
+                    }
                 }
             }
         }
@@ -89,27 +101,167 @@ fn discord_read(f: &mut std::fs::File) -> std::io::Result<String> {
     Ok(String::from_utf8_lossy(&buf).into_owned())
 }
 
+/// Number of bytes waiting in the named pipe, or `None` if the pipe is broken.
+/// Uses `PeekNamedPipe`, which never blocks.
 #[cfg(target_os = "windows")]
-fn discord_set_activity_legacy(pipe: &mut DiscordPipe, payload: serde_json::Value) -> bool {
+fn discord_bytes_available(f: &std::fs::File) -> Option<u32> {
+    use std::os::windows::io::AsRawHandle;
+
+    #[link(name = "kernel32")]
+    extern "system" {
+        fn PeekNamedPipe(
+            pipe: *mut std::ffi::c_void,
+            buffer: *mut std::ffi::c_void,
+            buffer_size: u32,
+            bytes_read: *mut u32,
+            total_bytes_avail: *mut u32,
+            bytes_left_this_message: *mut u32,
+        ) -> i32;
+    }
+
+    let mut available: u32 = 0;
+    // SAFETY: the handle comes from a live `File`; all out-pointers are either
+    // null (allowed by the API) or point to a valid local.
+    let ok = unsafe {
+        PeekNamedPipe(
+            f.as_raw_handle(),
+            std::ptr::null_mut(),
+            0,
+            std::ptr::null_mut(),
+            &mut available,
+            std::ptr::null_mut(),
+        )
+    };
+
+    if ok == 0 {
+        None
+    } else {
+        Some(available)
+    }
+}
+
+/// Consumes every response frame Discord already wrote, so the pipe buffer never
+/// fills up. Returns an error if the pipe is closed (caller reconnects).
+#[cfg(target_os = "windows")]
+fn discord_drain(f: &mut std::fs::File) -> std::io::Result<()> {
+    loop {
+        match discord_bytes_available(f) {
+            None => {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::BrokenPipe,
+                    "discord pipe closed",
+                ))
+            }
+            Some(available) if available >= 8 => {
+                discord_read(f)?;
+            }
+            Some(_) => return Ok(()),
+        }
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn lock_discord(state: &DiscordState) -> std::sync::MutexGuard<'_, Option<DiscordPipe>> {
+    // A panic while holding the lock must not disable Rich Presence for the rest
+    // of the session.
+    state.0.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
+#[cfg(target_os = "windows")]
+enum DiscordSendError {
+    /// The pipe broke: reconnect and retry.
+    Pipe,
+    /// Discord answered with an ERROR event (shown to the user).
+    Rejected(String),
+}
+
+/// Sends SET_ACTIVITY and waits briefly for Discord's answer to that nonce, so
+/// rejections (bad client id, invalid payload, ...) are reported instead of
+/// silently ignored. No answer within the timeout counts as success.
+#[cfg(target_os = "windows")]
+fn discord_set_activity(
+    pipe: &mut DiscordPipe,
+    payload: serde_json::Value,
+) -> Result<(), DiscordSendError> {
+    discord_drain(&mut pipe.0).map_err(|_| DiscordSendError::Pipe)?;
+
+    let nonce = uuid_v4();
     let msg = serde_json::json!({
         "cmd": "SET_ACTIVITY",
         "args": {
             "pid": std::process::id(),
             "activity": payload
         },
-        "nonce": uuid_v4()
+        "nonce": nonce
     })
     .to_string();
 
-    discord_write(&mut pipe.0, 1, &msg).is_ok()
+    discord_write(&mut pipe.0, 1, &msg).map_err(|_| DiscordSendError::Pipe)?;
+    discord_await_response(&mut pipe.0, &nonce, Duration::from_millis(600))
 }
+
+#[cfg(target_os = "windows")]
+fn discord_await_response(
+    f: &mut std::fs::File,
+    nonce: &str,
+    timeout: Duration,
+) -> Result<(), DiscordSendError> {
+    let deadline = std::time::Instant::now() + timeout;
+
+    loop {
+        match discord_bytes_available(f) {
+            None => return Err(DiscordSendError::Pipe),
+            Some(available) if available >= 8 => {
+                let frame = discord_read(f).map_err(|_| DiscordSendError::Pipe)?;
+                if let Some(result) = discord_response_for_nonce(&frame, nonce) {
+                    return result.map_err(DiscordSendError::Rejected);
+                }
+            }
+            Some(_) => {
+                if std::time::Instant::now() >= deadline {
+                    return Ok(());
+                }
+                std::thread::sleep(Duration::from_millis(25));
+            }
+        }
+    }
+}
+
+/// `Some(Ok)` / `Some(Err(message))` if `frame` answers `nonce`, else `None`.
+fn discord_response_for_nonce(frame: &str, nonce: &str) -> Option<Result<(), String>> {
+    let value = serde_json::from_str::<serde_json::Value>(frame).ok()?;
+
+    if value.get("nonce").and_then(|n| n.as_str()) != Some(nonce) {
+        return None;
+    }
+
+    if value.get("evt").and_then(|e| e.as_str()) == Some("ERROR") {
+        let message = value
+            .pointer("/data/message")
+            .and_then(|m| m.as_str())
+            .unwrap_or("Discord rechazo la actividad.")
+            .to_string();
+        return Some(Err(message));
+    }
+
+    Some(Ok(()))
+}
+
+/// Error string the frontend treats as "Discord is not open" (not shown).
+#[cfg(target_os = "windows")]
+const DISCORD_NOT_RUNNING: &str = "discord-not-running";
 
 fn uuid_v4() -> String {
     use std::collections::hash_map::DefaultHasher;
     use std::hash::{Hash, Hasher};
+    use std::sync::atomic::AtomicU64;
+
+    // Nonces are matched against Discord's answers: never reuse one.
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
     let mut h = DefaultHasher::new();
     SystemTime::now().hash(&mut h);
     std::process::id().hash(&mut h);
+    COUNTER.fetch_add(1, Ordering::Relaxed).hash(&mut h);
     let n = h.finish();
     format!(
         "{:016x}-{:04x}-4{:03x}-{:04x}-{:012x}",
@@ -121,24 +273,56 @@ fn uuid_v4() -> String {
     )
 }
 
+// Discord IPC is blocking pipe I/O: run it on the blocking pool, never on the
+// main thread (sync Tauri commands run on the main thread and freeze the UI).
 #[tauri::command]
 #[cfg(target_os = "windows")]
-fn update_discord_presence(
+async fn update_discord_presence(
+    app: tauri::AppHandle,
     title: String,
     artist: String,
     cover_url: Option<String>,
     elapsed_secs: f64,
     duration_secs: f64,
     is_playing: bool,
-    state: tauri::State<DiscordState>,
-) {
-    let mut guard = state.0.lock().unwrap();
+) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<DiscordState>();
+        update_discord_presence_blocking(
+            &state,
+            title,
+            artist,
+            cover_url,
+            elapsed_secs,
+            duration_secs,
+            is_playing,
+        )
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[cfg(target_os = "windows")]
+fn update_discord_presence_blocking(
+    state: &DiscordState,
+    title: String,
+    artist: String,
+    cover_url: Option<String>,
+    elapsed_secs: f64,
+    duration_secs: f64,
+    is_playing: bool,
+) -> Result<(), String> {
+    let mut guard = lock_discord(state);
 
     if guard.is_none() {
         *guard = discord_connect();
     }
 
-    if let Some(pipe) = guard.as_mut() {
+    let Some(pipe) = guard.as_mut() else {
+        return Err(DISCORD_NOT_RUNNING.into());
+    };
+
+    {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
@@ -167,12 +351,22 @@ fn update_discord_presence(
             activity["timestamps"] = serde_json::json!({ "start": start_ts });
         }
 
-        if !discord_set_activity_legacy(pipe, activity.clone()) {
-            *guard = None;
-            if let Some(new_pipe) = discord_connect() {
-                *guard = Some(new_pipe);
-                if let Some(reconnected_pipe) = guard.as_mut() {
-                    discord_set_activity_legacy(reconnected_pipe, activity);
+        match discord_set_activity(pipe, activity.clone()) {
+            Ok(()) => Ok(()),
+            Err(DiscordSendError::Rejected(message)) => Err(message),
+            Err(DiscordSendError::Pipe) => {
+                // Discord restarted: reconnect once and retry.
+                *guard = discord_connect();
+                match guard.as_mut() {
+                    None => Err(DISCORD_NOT_RUNNING.into()),
+                    Some(reconnected) => match discord_set_activity(reconnected, activity) {
+                        Ok(()) => Ok(()),
+                        Err(DiscordSendError::Rejected(message)) => Err(message),
+                        Err(DiscordSendError::Pipe) => {
+                            *guard = None;
+                            Err(DISCORD_NOT_RUNNING.into())
+                        }
+                    },
                 }
             }
         }
@@ -193,20 +387,31 @@ fn update_discord_presence(
 
 #[tauri::command]
 #[cfg(target_os = "windows")]
-fn clear_discord_presence(state: tauri::State<DiscordState>) {
-    let mut guard = state.0.lock().unwrap();
-    if let Some(pipe) = guard.as_mut() {
-        let msg = serde_json::json!({
-            "cmd": "SET_ACTIVITY",
-            "args": {
-                "pid": std::process::id(),
-                "activity": serde_json::Value::Null
-            },
-            "nonce": uuid_v4()
-        })
-        .to_string();
-        let _ = discord_write(&mut pipe.0, 1, &msg);
-    }
+async fn clear_discord_presence(app: tauri::AppHandle) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<DiscordState>();
+        let mut guard = lock_discord(&state);
+        if let Some(pipe) = guard.as_mut() {
+            if discord_drain(&mut pipe.0).is_err() {
+                *guard = None;
+                return;
+            }
+            let msg = serde_json::json!({
+                "cmd": "SET_ACTIVITY",
+                "args": {
+                    "pid": std::process::id(),
+                    "activity": serde_json::Value::Null
+                },
+                "nonce": uuid_v4()
+            })
+            .to_string();
+            if discord_write(&mut pipe.0, 1, &msg).is_err() {
+                *guard = None;
+            }
+        }
+    })
+    .await
+    .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -221,17 +426,91 @@ const CREATE_NO_WINDOW: u32 = 0x08000000;
 
 #[tauri::command]
 async fn fetch_url(url: String) -> Result<String, String> {
+    let parsed = validate_fetch_url(&url)?;
+
     reqwest::Client::builder()
         .user_agent("DIONYX lyrics module")
+        .connect_timeout(Duration::from_secs(10))
+        .timeout(Duration::from_secs(20))
         .build()
         .map_err(|e| e.to_string())?
-        .get(&url)
+        .get(parsed)
         .send()
         .await
+        .and_then(|response| response.error_for_status())
         .map_err(|e| e.to_string())?
         .text()
         .await
         .map_err(|e| e.to_string())
+}
+
+/// Hosts the frontend is allowed to reach through `fetch_url` (which exists
+/// to bypass CORS). Anything else is refused so the command cannot be used as
+/// a general-purpose proxy.
+const FETCH_URL_ALLOWED_HOSTS: &[&str] = &["ws.audioscrobbler.com", "lrclib.net", "api.deezer.com"];
+
+fn validate_fetch_url(url: &str) -> Result<reqwest::Url, String> {
+    let parsed = reqwest::Url::parse(url).map_err(|_| "URL no valida.".to_string())?;
+
+    if parsed.scheme() != "https" {
+        return Err("Solo se permiten URLs https.".into());
+    }
+
+    match parsed.host_str() {
+        Some(host) if FETCH_URL_ALLOWED_HOSTS.contains(&host) => Ok(parsed),
+        _ => Err("Host no permitido.".into()),
+    }
+}
+
+// ── Library roots (write/delete guard) ────────────────────────────────────
+
+/// Canonical folders scanned during this session. Commands that modify or
+/// delete files only act inside them.
+struct LibraryRoots(Mutex<Vec<PathBuf>>);
+
+fn remember_library_root(state: &LibraryRoots, root: &Path) {
+    if let Ok(canonical) = root.canonicalize() {
+        let mut roots = state.0.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        if !roots.contains(&canonical) {
+            roots.push(canonical);
+        }
+    }
+}
+
+fn is_inside_roots(roots: &[PathBuf], canonical: &Path) -> bool {
+    roots.iter().any(|root| canonical.starts_with(root))
+}
+
+/// Resolves `path` and checks that it is a supported audio file inside a
+/// scanned library folder.
+fn ensure_library_audio_file(state: &LibraryRoots, path: &str) -> Result<PathBuf, String> {
+    let canonical = PathBuf::from(path)
+        .canonicalize()
+        .map_err(|_| "El archivo no existe en el disco.".to_string())?;
+
+    if !canonical.is_file() || !is_supported_audio_file(&canonical) {
+        return Err("Solo se pueden modificar archivos de audio de la biblioteca.".into());
+    }
+
+    let roots = state.0.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    if !is_inside_roots(&roots, &canonical) {
+        return Err("El archivo esta fuera de la biblioteca escaneada.".into());
+    }
+
+    Ok(canonical)
+}
+
+fn ensure_library_folder(state: &LibraryRoots, path: &str) -> Result<PathBuf, String> {
+    let canonical = PathBuf::from(path)
+        .canonicalize()
+        .map_err(|_| "La carpeta de destino no existe.".to_string())?;
+
+    let roots = state.0.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    if !canonical.is_dir() || !is_inside_roots(&roots, &canonical) {
+        return Err("La carpeta de destino no es una biblioteca escaneada.".into());
+    }
+
+    Ok(canonical)
 }
 
 // ── Tray state ────────────────────────────────────────────────────────────
@@ -271,7 +550,12 @@ struct LibraryTrack {
     quality: String,
     duration: String,
     path: String,
+    /// Cached cover on disk (served through the asset protocol).
+    artwork_path: Option<String>,
+    /// Only used when the cover could not be written to the cache.
     artwork_data_url: Option<String>,
+    /// File modification time (Unix seconds), used for "recently added".
+    modified_at: Option<u64>,
 }
 
 #[derive(Serialize)]
@@ -284,8 +568,28 @@ struct LibraryScan {
 }
 
 #[tauri::command]
-async fn scan_music_folder(folder_path: String) -> Result<LibraryScan, String> {
-    let root = PathBuf::from(&folder_path);
+async fn scan_music_folder(
+    app: tauri::AppHandle,
+    folder_path: String,
+) -> Result<LibraryScan, String> {
+    let artwork_dir = app
+        .path()
+        .app_cache_dir()
+        .ok()
+        .map(|dir| dir.join("artwork"))
+        .filter(|dir| fs::create_dir_all(dir).is_ok());
+
+    let scan = run_blocking(move || scan_music_folder_blocking(&folder_path, artwork_dir.as_deref()))
+        .await?;
+    remember_library_root(&app.state::<LibraryRoots>(), Path::new(&scan.scanned_path));
+    Ok(scan)
+}
+
+fn scan_music_folder_blocking(
+    folder_path: &str,
+    artwork_dir: Option<&Path>,
+) -> Result<LibraryScan, String> {
+    let root = PathBuf::from(folder_path);
 
     if !root.exists() {
         return Err("La carpeta seleccionada no existe.".into());
@@ -303,8 +607,10 @@ async fn scan_music_folder(folder_path: String) -> Result<LibraryScan, String> {
         .to_string();
 
     let mut audio_files = Vec::new();
-    collect_audio_files(&root, &mut audio_files)
-        .map_err(|error| format!("No pude leer la carpeta: {error}"))?;
+    // Only the root folder itself must be readable; unreadable subfolders are
+    // skipped instead of failing the whole scan.
+    fs::read_dir(&root).map_err(|error| format!("No pude leer la carpeta: {error}"))?;
+    collect_audio_files(&root, &mut audio_files);
 
     audio_files.sort_by(|left, right| {
         left.file_name()
@@ -314,7 +620,7 @@ async fn scan_music_folder(folder_path: String) -> Result<LibraryScan, String> {
 
     let tracks = audio_files
         .iter()
-        .map(|path| track_from_path(path, &collection_name))
+        .map(|path| track_from_path(path, artwork_dir))
         .collect::<Vec<_>>();
 
     Ok(LibraryScan {
@@ -325,19 +631,25 @@ async fn scan_music_folder(folder_path: String) -> Result<LibraryScan, String> {
     })
 }
 
-fn collect_audio_files(directory: &Path, output: &mut Vec<PathBuf>) -> std::io::Result<()> {
-    for entry in fs::read_dir(directory)? {
-        let entry = entry?;
+/// Recursively collects supported audio files. Symlinked/junction folders are
+/// not followed (avoids cycles) and unreadable entries are skipped.
+fn collect_audio_files(directory: &Path, output: &mut Vec<PathBuf>) {
+    let Ok(entries) = fs::read_dir(directory) else {
+        return;
+    };
+
+    for entry in entries.flatten() {
+        let Ok(file_type) = entry.file_type() else {
+            continue;
+        };
         let path = entry.path();
 
-        if path.is_dir() {
-            collect_audio_files(&path, output)?;
-        } else if is_supported_audio_file(&path) {
+        if file_type.is_dir() {
+            collect_audio_files(&path, output);
+        } else if (file_type.is_file() || file_type.is_symlink()) && is_supported_audio_file(&path) {
             output.push(path);
         }
     }
-
-    Ok(())
 }
 
 fn is_supported_audio_file(path: &Path) -> bool {
@@ -352,7 +664,7 @@ fn is_supported_audio_file(path: &Path) -> bool {
         .unwrap_or(false)
 }
 
-fn track_from_path(path: &Path, _collection_name: &str) -> LibraryTrack {
+fn track_from_path(path: &Path, artwork_dir: Option<&Path>) -> LibraryTrack {
     let file_stem = path
         .file_stem()
         .and_then(|stem| stem.to_str())
@@ -383,7 +695,13 @@ fn track_from_path(path: &Path, _collection_name: &str) -> LibraryTrack {
         quality,
         duration: "--:--".into(),
         path: path.display().to_string(),
+        artwork_path: None,
         artwork_data_url: None,
+        modified_at: fs::metadata(path)
+            .and_then(|metadata| metadata.modified())
+            .ok()
+            .and_then(|modified| modified.duration_since(UNIX_EPOCH).ok())
+            .map(|elapsed| elapsed.as_secs()),
     };
 
     if let Ok(tagged_file) = Probe::open(path).and_then(|probe| probe.read()) {
@@ -407,7 +725,12 @@ fn track_from_path(path: &Path, _collection_name: &str) -> LibraryTrack {
                 track.album = track.artist.clone();
             }
 
-            track.artwork_data_url = extract_artwork_data_url(tag);
+            if let Some(picture) = tag.pictures().first() {
+                match artwork_dir.and_then(|dir| cache_artwork(dir, picture)) {
+                    Some(cached) => track.artwork_path = Some(cached),
+                    None => track.artwork_data_url = artwork_data_url(picture),
+                }
+            }
         }
 
         track.duration = format_duration(tagged_file.properties().duration());
@@ -431,9 +754,58 @@ fn clean_metadata_value(value: Option<&str>) -> Option<String> {
         .map(ToString::to_string)
 }
 
-fn extract_artwork_data_url(tag: &lofty::tag::Tag) -> Option<String> {
-    let picture = tag.pictures().first()?;
-    let mime_type = picture.mime_type()?.as_str();
+/// Image type of an embedded cover: declared MIME first, then magic bytes.
+fn artwork_kind(picture: &lofty::picture::Picture) -> Option<(&'static str, &'static str)> {
+    use lofty::picture::MimeType;
+
+    match picture.mime_type() {
+        Some(MimeType::Png) => return Some(("png", "image/png")),
+        Some(MimeType::Jpeg) => return Some(("jpg", "image/jpeg")),
+        Some(MimeType::Gif) => return Some(("gif", "image/gif")),
+        Some(MimeType::Bmp) => return Some(("bmp", "image/bmp")),
+        _ => {}
+    }
+
+    let data = picture.data();
+    if data.starts_with(&[0x89, b'P', b'N', b'G']) {
+        Some(("png", "image/png"))
+    } else if data.starts_with(&[0xFF, 0xD8, 0xFF]) {
+        Some(("jpg", "image/jpeg"))
+    } else {
+        None
+    }
+}
+
+/// Writes the cover to `<cache>/artwork/<sha256>.<ext>` (once per distinct
+/// image, so a whole album shares one file) and returns its path.
+fn cache_artwork(dir: &Path, picture: &lofty::picture::Picture) -> Option<String> {
+    use sha2::{Digest, Sha256};
+
+    let (extension, _) = artwork_kind(picture)?;
+    let data = picture.data();
+    if data.is_empty() {
+        return None;
+    }
+
+    let digest = format!("{:x}", Sha256::digest(data));
+    let file = dir.join(format!("{}.{extension}", &digest[..32]));
+
+    if !file.exists() {
+        let partial = dir.join(format!("{}.{extension}.part", &digest[..32]));
+        fs::write(&partial, data).ok()?;
+        if fs::rename(&partial, &file).is_err() {
+            let _ = fs::remove_file(&partial);
+            if !file.exists() {
+                return None;
+            }
+        }
+    }
+
+    Some(file.display().to_string())
+}
+
+fn artwork_data_url(picture: &lofty::picture::Picture) -> Option<String> {
+    let (_, mime_type) = artwork_kind(picture)?;
     let encoded = {
         use base64::{engine::general_purpose::STANDARD, Engine as _};
 
@@ -461,7 +833,25 @@ fn format_duration(duration: Duration) -> String {
 /// Writes title, artist, album (and optionally a new cover image) to an audio file.
 /// `artwork_b64` is a base64-encoded JPEG or PNG; `artwork_mime` is its MIME type.
 #[tauri::command]
-fn save_track_metadata(
+async fn save_track_metadata(
+    roots: tauri::State<'_, LibraryRoots>,
+    path: String,
+    title: String,
+    artist: String,
+    album: String,
+    artwork_b64: Option<String>,
+    artwork_mime: Option<String>,
+) -> Result<(), String> {
+    let path = ensure_library_audio_file(&roots, &path)?
+        .display()
+        .to_string();
+    run_blocking(move || {
+        save_track_metadata_blocking(path, title, artist, album, artwork_b64, artwork_mime)
+    })
+    .await
+}
+
+fn save_track_metadata_blocking(
     path: String,
     title: String,
     artist: String,
@@ -551,20 +941,40 @@ struct DownloadFailed {
 
 /// Permanently deletes an audio file from disk.
 #[tauri::command]
-fn delete_track_file(path: String) -> Result<(), String> {
-    let file_path = std::path::PathBuf::from(&path);
+async fn delete_track_file(
+    roots: tauri::State<'_, LibraryRoots>,
+    path: String,
+) -> Result<(), String> {
+    // Only audio files inside a folder scanned this session can be deleted.
+    let file_path = ensure_library_audio_file(&roots, &path)?;
+    run_blocking(move || {
+        std::fs::remove_file(&file_path)
+            .map_err(|e| format!("No se pudo eliminar el archivo: {e}"))
+    })
+    .await
+}
 
-    if !file_path.exists() {
-        return Err("El archivo no existe en el disco.".into());
-    }
-
-    std::fs::remove_file(&file_path).map_err(|e| format!("No se pudo eliminar el archivo: {e}"))
+/// Runs blocking work (file I/O, child processes) on Tauri's blocking pool so
+/// it never stalls the main thread or an async worker.
+async fn run_blocking<T, F>(work: F) -> Result<T, String>
+where
+    F: FnOnce() -> Result<T, String> + Send + 'static,
+    T: Send + 'static,
+{
+    tauri::async_runtime::spawn_blocking(work)
+        .await
+        .map_err(|e| format!("La tarea en segundo plano falló: {e}"))?
 }
 
 /// Returns `Ok(version)` if yt-dlp is in PATH, or an error string.
 #[tauri::command]
-fn check_ytdlp(app: tauri::AppHandle) -> Result<String, String> {
-    let mut cmd = std::process::Command::new(ytdlp_exe(&app));
+async fn check_ytdlp(app: tauri::AppHandle) -> Result<String, String> {
+    let exe = ytdlp_exe(&app);
+    run_blocking(move || check_ytdlp_blocking(&exe)).await
+}
+
+fn check_ytdlp_blocking(exe: &Path) -> Result<String, String> {
+    let mut cmd = std::process::Command::new(exe);
     cmd.arg("--version");
     #[cfg(target_os = "windows")]
     cmd.creation_flags(CREATE_NO_WINDOW);
@@ -580,8 +990,12 @@ fn check_ytdlp(app: tauri::AppHandle) -> Result<String, String> {
 }
 
 #[tauri::command]
-fn check_ffmpeg() -> Result<String, String> {
-    let mut cmd = std::process::Command::new("ffmpeg");
+async fn check_ffmpeg() -> Result<String, String> {
+    run_blocking(check_ffmpeg_blocking).await
+}
+
+fn check_ffmpeg_blocking() -> Result<String, String> {
+    let mut cmd = std::process::Command::new(ffmpeg_exe());
     cmd.arg("-version");
     #[cfg(target_os = "windows")]
     cmd.creation_flags(CREATE_NO_WINDOW);
@@ -627,21 +1041,37 @@ fn managed_ytdlp_filename() -> &'static str {
     }
 }
 
-fn managed_ytdlp_download_url() -> &'static str {
+/// Official stable release channel. Every release publishes `SHA2-256SUMS`.
+const YTDLP_RELEASE_BASE_URL: &str = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/";
+
+/// Asset name of the standalone yt-dlp build for this platform.
+fn managed_ytdlp_asset_name() -> &'static str {
     #[cfg(target_os = "windows")]
     {
-        "https://github.com/yt-dlp/yt-dlp-nightly-builds/releases/latest/download/yt-dlp.exe"
+        "yt-dlp.exe"
     }
 
     #[cfg(target_os = "macos")]
     {
-        "https://github.com/yt-dlp/yt-dlp-nightly-builds/releases/latest/download/yt-dlp_macos"
+        "yt-dlp_macos"
     }
 
     #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
     {
-        "https://github.com/yt-dlp/yt-dlp-nightly-builds/releases/latest/download/yt-dlp"
+        "yt-dlp"
     }
+}
+
+/// Finds the lowercase SHA-256 for `asset` in a `SHA2-256SUMS` file
+/// (`<hash>  <name>` per line, optional `*` binary marker).
+fn expected_sha256(sums: &str, asset: &str) -> Option<String> {
+    sums.lines().find_map(|line| {
+        let mut parts = line.split_whitespace();
+        let hash = parts.next()?;
+        let name = parts.next()?.trim_start_matches('*');
+        (name == asset && hash.len() == 64 && hash.chars().all(|c| c.is_ascii_hexdigit()))
+            .then(|| hash.to_ascii_lowercase())
+    })
 }
 
 fn append_platform_specific_ytdlp_args(args: &mut Vec<String>) {
@@ -649,6 +1079,12 @@ fn append_platform_specific_ytdlp_args(args: &mut Vec<String>) {
         "--extractor-args".into(),
         "youtube:player_client=default,-android_sdkless".into(),
     ]);
+
+    // yt-dlp also needs ffmpeg (--extract-audio, thumbnails); hand it the one we
+    // found so it works even when ffmpeg is not on this process' PATH.
+    if let Some(ffmpeg) = find_executable("ffmpeg") {
+        args.extend(["--ffmpeg-location".into(), ffmpeg.display().to_string()]);
+    }
 
     #[cfg(target_os = "windows")]
     {
@@ -663,14 +1099,78 @@ fn is_likely_youtube_video_id(value: &str) -> bool {
             .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
 }
 
-/// Finds yt-dlp: prefers the local tools dir, falls back to system PATH.
+/// Finds yt-dlp: prefers the local tools dir, then PATH and the usual package
+/// manager folders (see `find_executable`).
 fn ytdlp_exe(app: &tauri::AppHandle) -> PathBuf {
     let local = tools_dir(app).join(managed_ytdlp_filename());
     if local.exists() {
         local
     } else {
-        PathBuf::from("yt-dlp")
+        find_executable("yt-dlp").unwrap_or_else(|| PathBuf::from("yt-dlp"))
     }
+}
+
+/// Folders where package managers put executables but that are often missing
+/// from this process' PATH: a macOS app opened from Finder only gets
+/// /usr/bin:/bin:/usr/sbin:/sbin, and on Windows the PATH of a running process
+/// is not refreshed after `winget install`.
+fn extra_tool_dirs() -> Vec<PathBuf> {
+    let mut dirs = Vec::new();
+
+    #[cfg(target_os = "windows")]
+    {
+        if let Some(local) = std::env::var_os("LOCALAPPDATA") {
+            dirs.push(PathBuf::from(local).join("Microsoft").join("WinGet").join("Links"));
+        }
+        if let Some(program_files) = std::env::var_os("ProgramFiles") {
+            dirs.push(PathBuf::from(program_files).join("WinGet").join("Links"));
+        }
+        if let Some(profile) = std::env::var_os("USERPROFILE") {
+            dirs.push(PathBuf::from(profile).join("scoop").join("shims"));
+        }
+        dirs.push(PathBuf::from(r"C:\ProgramData\chocolatey\bin"));
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        dirs.push(PathBuf::from("/opt/homebrew/bin"));
+        dirs.push(PathBuf::from("/usr/local/bin"));
+        dirs.push(PathBuf::from("/opt/local/bin"));
+    }
+
+    #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
+    {
+        dirs.push(PathBuf::from("/usr/local/bin"));
+        if let Some(home) = std::env::var_os("HOME") {
+            dirs.push(PathBuf::from(home).join(".local").join("bin"));
+        }
+    }
+
+    dirs
+}
+
+/// Looks for `name` (plus `.exe` on Windows) in PATH, then in `extra_tool_dirs`.
+fn find_executable(name: &str) -> Option<PathBuf> {
+    let file_name = if cfg!(target_os = "windows") {
+        format!("{name}.exe")
+    } else {
+        name.to_string()
+    };
+
+    let path_dirs = std::env::var_os("PATH")
+        .map(|paths| std::env::split_paths(&paths).collect::<Vec<_>>())
+        .unwrap_or_default();
+
+    path_dirs
+        .into_iter()
+        .chain(extra_tool_dirs())
+        .map(|dir| dir.join(&file_name))
+        .find(|candidate| candidate.is_file())
+}
+
+/// ffmpeg resolved through `find_executable`, falling back to the bare name.
+fn ffmpeg_exe() -> PathBuf {
+    find_executable("ffmpeg").unwrap_or_else(|| PathBuf::from("ffmpeg"))
 }
 
 // ── Tool install commands ─────────────────────────────────────────────────
@@ -703,6 +1203,8 @@ struct ToolingSupport {
 }
 
 #[tauri::command]
+// Each platform block returns early; which one is "last" depends on the target.
+#[allow(clippy::needless_return)]
 fn get_tooling_support() -> ToolingSupport {
     #[cfg(target_os = "windows")]
     {
@@ -739,55 +1241,108 @@ fn get_tooling_support() -> ToolingSupport {
 }
 
 /// Downloads the platform-specific yt-dlp binary into the DIONYX tools dir.
+///
+/// The binary is streamed to a `.part` file, verified against the release's
+/// published SHA-256 and only then moved over the previous binary, so an
+/// interrupted or tampered download never replaces a working yt-dlp.
 #[tauri::command]
 async fn install_ytdlp(app: tauri::AppHandle) -> Result<(), String> {
+    use futures_util::StreamExt as _;
+    use sha2::{Digest, Sha256};
+    use std::io::Write as _;
     use tauri::Emitter as _;
 
     let dir = tools_dir(&app);
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
 
-    let url = managed_ytdlp_download_url();
+    let asset = managed_ytdlp_asset_name();
     let dest = dir.join(managed_ytdlp_filename());
+    let partial = dir.join(format!("{}.part", managed_ytdlp_filename()));
 
-    let resp = reqwest::get(url).await.map_err(|e| e.to_string())?;
+    let client = reqwest::Client::builder()
+        .user_agent("DIONYX")
+        .connect_timeout(Duration::from_secs(15))
+        .timeout(Duration::from_secs(600))
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let sums = client
+        .get(format!("{YTDLP_RELEASE_BASE_URL}SHA2-256SUMS"))
+        .send()
+        .await
+        .and_then(|r| r.error_for_status())
+        .map_err(|e| format!("No pude obtener las sumas de verificación de yt-dlp: {e}"))?
+        .text()
+        .await
+        .map_err(|e| e.to_string())?;
+    let expected = expected_sha256(&sums, asset)
+        .ok_or_else(|| format!("La release de yt-dlp no publica una suma para {asset}."))?;
+
+    let resp = client
+        .get(format!("{YTDLP_RELEASE_BASE_URL}{asset}"))
+        .send()
+        .await
+        .and_then(|r| r.error_for_status())
+        .map_err(|e| format!("No pude descargar yt-dlp: {e}"))?;
     let total = resp.content_length().unwrap_or(0);
     let mut stream = resp.bytes_stream();
 
-    use futures_util::StreamExt as _;
-    use std::io::Write as _;
+    let result: Result<(), String> = async {
+        let mut file = std::fs::File::create(&partial).map_err(|e| e.to_string())?;
+        let mut hasher = Sha256::new();
+        let mut downloaded: u64 = 0;
+        let mut last_pct: u8 = 0;
 
-    let mut file = std::fs::File::create(&dest).map_err(|e| e.to_string())?;
-    let mut downloaded: u64 = 0;
-    let mut last_pct: u8 = 0;
-
-    while let Some(chunk) = stream.next().await {
-        let chunk = chunk.map_err(|e| e.to_string())?;
-        file.write_all(&chunk).map_err(|e| e.to_string())?;
-        downloaded += chunk.len() as u64;
-        if total > 0 {
-            let pct = ((downloaded * 100) / total) as u8;
-            if pct != last_pct {
-                last_pct = pct;
-                let _ = app.emit(
-                    "tool-progress",
-                    ToolProgress {
-                        tool: "ytdlp".into(),
-                        percent: pct,
-                    },
-                );
+        while let Some(chunk) = stream.next().await {
+            let chunk = chunk.map_err(|e| format!("La descarga de yt-dlp se interrumpió: {e}"))?;
+            file.write_all(&chunk).map_err(|e| e.to_string())?;
+            hasher.update(&chunk);
+            downloaded += chunk.len() as u64;
+            if let Some(pct) = (downloaded * 100).checked_div(total) {
+                let pct = pct.min(100) as u8;
+                if pct != last_pct {
+                    last_pct = pct;
+                    let _ = app.emit(
+                        "tool-progress",
+                        ToolProgress {
+                            tool: "ytdlp".into(),
+                            percent: pct,
+                        },
+                    );
+                }
             }
         }
-    }
 
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let mut permissions = std::fs::metadata(&dest)
-            .map_err(|e| e.to_string())?
-            .permissions();
-        permissions.set_mode(0o755);
-        std::fs::set_permissions(&dest, permissions).map_err(|e| e.to_string())?;
+        file.sync_all().map_err(|e| e.to_string())?;
+        drop(file);
+
+        let actual = format!("{:x}", hasher.finalize());
+        if actual != expected {
+            return Err(
+                "La verificación SHA-256 de yt-dlp falló; no se instaló el archivo descargado."
+                    .into(),
+            );
+        }
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mut permissions = std::fs::metadata(&partial)
+                .map_err(|e| e.to_string())?
+                .permissions();
+            permissions.set_mode(0o755);
+            std::fs::set_permissions(&partial, permissions).map_err(|e| e.to_string())?;
+        }
+
+        std::fs::rename(&partial, &dest)
+            .map_err(|e| format!("No pude reemplazar yt-dlp (¿está en uso?): {e}"))
     }
+    .await;
+
+    if result.is_err() {
+        let _ = std::fs::remove_file(&partial);
+    }
+    result?;
 
     let _ = app.emit(
         "tool-done",
@@ -814,7 +1369,9 @@ async fn install_ffmpeg(app: tauri::AppHandle) -> Result<(), String> {
     let out = tokio::task::spawn_blocking(|| {
         #[cfg(target_os = "windows")]
         let mut cmd = {
-            let mut cmd = std::process::Command::new("winget");
+            let mut cmd = std::process::Command::new(
+                find_executable("winget").unwrap_or_else(|| PathBuf::from("winget")),
+            );
             cmd.args([
                 "install",
                 "--id",
@@ -828,7 +1385,10 @@ async fn install_ffmpeg(app: tauri::AppHandle) -> Result<(), String> {
 
         #[cfg(target_os = "macos")]
         let mut cmd = {
-            let mut cmd = std::process::Command::new("brew");
+            // Finder-launched apps do not have Homebrew on PATH.
+            let mut cmd = std::process::Command::new(
+                find_executable("brew").unwrap_or_else(|| PathBuf::from("brew")),
+            );
             cmd.args(["install", "ffmpeg"]);
             cmd
         };
@@ -943,9 +1503,11 @@ async fn search_tracks(
     cmd.args(&args);
     #[cfg(target_os = "windows")]
     cmd.creation_flags(CREATE_NO_WINDOW);
-    let output = cmd
-        .output()
-        .map_err(|e| format!("No se pudo ejecutar yt-dlp: {e}"))?;
+    let output = run_blocking(move || {
+        cmd.output()
+            .map_err(|e| format!("No se pudo ejecutar yt-dlp: {e}"))
+    })
+    .await?;
 
     if !output.status.success() {
         return Err("La búsqueda no devolvió resultados.".to_string());
@@ -1079,8 +1641,12 @@ fn resolve_to_ytmusic_url(input: &str, ytdlp: &Path) -> String {
 #[tauri::command]
 async fn get_video_info(url: String, app: tauri::AppHandle) -> Result<String, String> {
     let exe = ytdlp_exe(&app);
-    let resolved = resolve_to_ytmusic_url(&url, &exe);
-    let mut info_cmd = std::process::Command::new(&exe);
+    run_blocking(move || get_video_info_blocking(&url, &exe)).await
+}
+
+fn get_video_info_blocking(url: &str, exe: &Path) -> Result<String, String> {
+    let resolved = resolve_to_ytmusic_url(url, exe);
+    let mut info_cmd = std::process::Command::new(exe);
     let mut info_args = vec![
         "--get-title".to_string(),
         "--no-playlist".to_string(),
@@ -1121,17 +1687,27 @@ async fn get_video_info(url: String, app: tauri::AppHandle) -> Result<String, St
 #[tauri::command]
 fn download_audio(
     app: tauri::AppHandle,
+    roots: tauri::State<'_, LibraryRoots>,
     download_id: String,
     url: String,
     format: String,
     output_dir: String,
 ) -> Result<(), String> {
+    if !matches!(format.as_str(), "mp3" | "flac" | "m4a" | "opus" | "ogg" | "wav") {
+        return Err("Formato de audio no soportado.".into());
+    }
+    let output_dir = ensure_library_folder(&roots, &output_dir)?
+        .display()
+        .to_string();
+
     // Resolve text queries → YouTube Music URL for better metadata/artwork
     let exe = ytdlp_exe(&app);
-    let resolved_url = resolve_to_ytmusic_url(&url, &exe);
     std::thread::spawn(move || {
         use std::io::BufRead as _;
         use tauri::Emitter as _;
+
+        // Text queries run a yt-dlp search; do it here, off the main thread.
+        let resolved_url = resolve_to_ytmusic_url(&url, &exe);
 
         // Use the video ID (always ASCII) as the temp filename during download.
         // This avoids OSError [Errno 22] on Windows with Unicode/Japanese titles.
@@ -1214,7 +1790,7 @@ fn download_audio(
                         // the extracted audio (--extract-audio). The last one is
                         // the file that actually exists after yt-dlp finishes.
                         if line.contains("Destination:") {
-                            if let Some(path_str) = line.splitn(2, "Destination:").nth(1) {
+                            if let Some((_, path_str)) = line.split_once("Destination:") {
                                 native_path = Some(PathBuf::from(path_str.trim()));
                             }
                         }
@@ -1255,14 +1831,13 @@ fn download_audio(
                         let message = stderr_content
                             .lines()
                             .filter(|l| !l.trim().is_empty())
-                            .filter(|l| {
+                            .rfind(|l| {
                                 let low = l.to_lowercase();
                                 low.contains("error")
                                     || low.contains("warning")
                                     || low.contains("unable")
                             })
-                            .last()
-                            .or_else(|| stderr_content.lines().last())
+                            .or_else(|| stderr_content.lines().next_back())
                             .map(|l| l.trim().trim_start_matches("ERROR: ").to_string())
                             .unwrap_or_else(|| "yt-dlp terminó con un error desconocido.".into());
 
@@ -1382,14 +1957,15 @@ fn convert_audio(src: &Path, format: &str, meta: TrackMeta) -> bool {
     if src_ext == target_ext {
         // Embed the thumbnail if present, then rename.
         embed_thumbnail_inplace(src);
-        let dst = src.with_file_name(format!("{stem}.{target_ext}"));
+        let dst = unique_destination(&src.with_file_name(format!("{stem}.{target_ext}")), src);
         if dst != src {
             let _ = std::fs::rename(src, &dst);
         }
         return true;
     }
 
-    let dst = src.with_file_name(format!("{stem}.{target_ext}"));
+    // Never overwrite an existing library file that happens to share the title.
+    let dst = unique_destination(&src.with_file_name(format!("{stem}.{target_ext}")), src);
     let src_str = src.to_str().unwrap_or("");
     let dst_str = dst.to_str().unwrap_or("");
 
@@ -1453,7 +2029,7 @@ fn convert_audio(src: &Path, format: &str, meta: TrackMeta) -> bool {
     args.extend([dst_str.into(), "-y".into()]);
 
     let run_ffmpeg = |a: &[String]| -> bool {
-        let mut ff = std::process::Command::new("ffmpeg");
+        let mut ff = std::process::Command::new(ffmpeg_exe());
         ff.args(a);
         #[cfg(target_os = "windows")]
         ff.creation_flags(CREATE_NO_WINDOW);
@@ -1511,6 +2087,38 @@ fn convert_audio(src: &Path, format: &str, meta: TrackMeta) -> bool {
     false
 }
 
+/// Returns `candidate` if it is free (or is `src` itself); otherwise the first
+/// free "Name (2).ext", "Name (3).ext", ... in the same folder.
+fn unique_destination(candidate: &Path, src: &Path) -> PathBuf {
+    if candidate == src || !candidate.exists() {
+        return candidate.to_path_buf();
+    }
+
+    let stem = candidate
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("track")
+        .to_string();
+    let ext = candidate
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| format!(".{e}"))
+        .unwrap_or_default();
+
+    for n in 2..10_000 {
+        let next = candidate.with_file_name(format!("{stem} ({n}){ext}"));
+        if !next.exists() {
+            return next;
+        }
+    }
+
+    let millis = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis();
+    candidate.with_file_name(format!("{stem} ({millis}){ext}"))
+}
+
 /// For cases where the native format already matches the target, embed the
 /// companion thumbnail in-place (overwrite the source file).
 fn embed_thumbnail_inplace(src: &Path) {
@@ -1552,7 +2160,7 @@ fn embed_thumbnail_inplace(src: &Path) {
     }
     args.extend([tmp_str.to_string(), "-y".to_string()]);
 
-    let mut ff = std::process::Command::new("ffmpeg");
+    let mut ff = std::process::Command::new(ffmpeg_exe());
     ff.args(&args);
     #[cfg(target_os = "windows")]
     ff.creation_flags(CREATE_NO_WINDOW);
@@ -1588,19 +2196,25 @@ fn extract_ydlp_field(line: &str, keyword: &str) -> String {
 
 // ── entry point ───────────────────────────────────────────────────────────
 
+/// Brings the main window back (from the tray, minimized or hidden).
+fn show_main_window(app: &tauri::AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.unminimize();
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let app = tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            if let Some(window) = app.get_webview_window("main") {
-                let _ = window.unminimize();
-                let _ = window.show();
-                let _ = window.set_focus();
-            }
+            show_main_window(app);
         }))
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .manage(HideOnTrayState(AtomicBool::new(false)))
+        .manage(LibraryRoots(Mutex::new(Vec::new())))
         .manage(create_discord_state())
         .invoke_handler(tauri::generate_handler![
             scan_music_folder,
@@ -1618,7 +2232,12 @@ pub fn run() {
             download_audio,
             fetch_url,
             update_discord_presence,
-            clear_discord_presence
+            clear_discord_presence,
+            lastfm::lastfm_is_configured,
+            lastfm::lastfm_begin_auth,
+            lastfm::lastfm_finish_auth,
+            lastfm::lastfm_now_playing,
+            lastfm::lastfm_scrobble
         ])
         .setup(|app| {
             use tauri::{
@@ -1647,19 +2266,12 @@ pub fn run() {
                         ..
                     } = event
                     {
-                        let app = tray.app_handle();
-                        if let Some(window) = app.get_webview_window("main") {
-                            let _ = window.show();
-                            let _ = window.set_focus();
-                        }
+                        show_main_window(tray.app_handle());
                     }
                 })
                 .on_menu_event(|app, event| match event.id.as_ref() {
                     "show" => {
-                        if let Some(window) = app.get_webview_window("main") {
-                            let _ = window.show();
-                            let _ = window.set_focus();
-                        }
+                        show_main_window(app);
                     }
                     "quit" => {
                         app.exit(0);
@@ -1684,6 +2296,149 @@ pub fn run() {
                 }
             }
         })
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application");
+
+    app.run(|_app_handle, _event| {
+        // macOS: clicking the Dock icon while the window is hidden in the tray
+        // ("hide on close") must bring it back.
+        #[cfg(target_os = "macos")]
+        if let tauri::RunEvent::Reopen {
+            has_visible_windows: false,
+            ..
+        } = _event
+        {
+            show_main_window(_app_handle);
+        }
+    });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn expected_sha256_finds_asset_line() {
+        let hash = "a".repeat(64);
+        let sums = format!(
+            "{}  yt-dlp\n{}  yt-dlp.exe\n{} *yt-dlp_macos\n",
+            "b".repeat(64),
+            hash,
+            "C".repeat(64)
+        );
+        assert_eq!(expected_sha256(&sums, "yt-dlp.exe"), Some(hash));
+        assert_eq!(expected_sha256(&sums, "yt-dlp_macos"), Some("c".repeat(64)));
+        assert_eq!(expected_sha256(&sums, "yt-dlp_linux"), None);
+    }
+
+    #[test]
+    fn fetch_url_only_allows_known_https_hosts() {
+        assert!(validate_fetch_url("https://lrclib.net/api/get?track_name=x").is_ok());
+        assert!(validate_fetch_url("https://api.deezer.com/search?q=x").is_ok());
+        assert!(validate_fetch_url("https://cdn-images.dzcdn.net/x.jpg").is_err());
+        assert!(validate_fetch_url("https://ws.audioscrobbler.com/2.0/?method=x").is_ok());
+        assert!(validate_fetch_url("http://lrclib.net/api/get").is_err());
+        assert!(validate_fetch_url("https://evil.example/").is_err());
+        assert!(validate_fetch_url("https://lrclib.net.evil.example/").is_err());
+        assert!(validate_fetch_url("file:///C:/Windows/win.ini").is_err());
+    }
+
+    #[test]
+    fn library_guard_only_accepts_audio_inside_scanned_roots() {
+        let base = std::env::temp_dir().join(format!("dionyx-roots-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        let library = base.join("library");
+        let outside = base.join("outside");
+        std::fs::create_dir_all(&library).unwrap();
+        std::fs::create_dir_all(&outside).unwrap();
+        std::fs::write(library.join("song.mp3"), b"x").unwrap();
+        std::fs::write(library.join("notes.txt"), b"x").unwrap();
+        std::fs::write(outside.join("other.mp3"), b"x").unwrap();
+
+        let state = LibraryRoots(Mutex::new(Vec::new()));
+        let inside = library.join("song.mp3").display().to_string();
+        assert!(ensure_library_audio_file(&state, &inside).is_err(), "nothing scanned yet");
+
+        remember_library_root(&state, &library);
+        assert!(ensure_library_audio_file(&state, &inside).is_ok());
+        assert!(ensure_library_audio_file(&state, &library.join("notes.txt").display().to_string()).is_err());
+        assert!(ensure_library_audio_file(&state, &outside.join("other.mp3").display().to_string()).is_err());
+        let traversal = library.join("..").join("outside").join("other.mp3");
+        assert!(ensure_library_audio_file(&state, &traversal.display().to_string()).is_err());
+        assert!(ensure_library_folder(&state, &library.display().to_string()).is_ok());
+        assert!(ensure_library_folder(&state, &outside.display().to_string()).is_err());
+
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn discord_response_matching() {
+        let ok = r#"{"cmd":"SET_ACTIVITY","evt":null,"nonce":"n1","data":{}}"#;
+        let err = r#"{"cmd":"SET_ACTIVITY","evt":"ERROR","nonce":"n2","data":{"code":4000,"message":"child \"activity\" fails"}}"#;
+        assert_eq!(discord_response_for_nonce(ok, "n1"), Some(Ok(())));
+        assert_eq!(discord_response_for_nonce(ok, "other"), None);
+        assert_eq!(
+            discord_response_for_nonce(err, "n2"),
+            Some(Err("child \"activity\" fails".into()))
+        );
+        assert_eq!(discord_response_for_nonce("not json", "n1"), None);
+    }
+
+    #[test]
+    fn nonces_are_unique() {
+        let a = uuid_v4();
+        let b = uuid_v4();
+        assert_ne!(a, b);
+    }
+
+    #[test]
+    fn find_executable_searches_path() {
+        let dir = std::env::temp_dir().join(format!("dionyx-bin-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let name = "dionyx-fake-tool";
+        let file = if cfg!(target_os = "windows") {
+            dir.join(format!("{name}.exe"))
+        } else {
+            dir.join(name)
+        };
+        std::fs::write(&file, b"x").unwrap();
+
+        let old_path = std::env::var_os("PATH").unwrap_or_default();
+        let mut paths = vec![dir.clone()];
+        paths.extend(std::env::split_paths(&old_path));
+        std::env::set_var("PATH", std::env::join_paths(paths).unwrap());
+        assert_eq!(find_executable(name), Some(file));
+        std::env::set_var("PATH", old_path);
+
+        assert_eq!(find_executable("dionyx-surely-missing-tool"), None);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn expected_sha256_rejects_malformed_hash() {
+        assert_eq!(expected_sha256("xyz  yt-dlp.exe", "yt-dlp.exe"), None);
+    }
+
+    #[test]
+    fn unique_destination_avoids_existing_files() {
+        let dir = std::env::temp_dir().join(format!("dionyx-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+
+        let src = dir.join("abc123.m4a");
+        let wanted = dir.join("Intro.mp3");
+        assert_eq!(unique_destination(&wanted, &src), wanted);
+
+        std::fs::write(&wanted, b"existing").unwrap();
+        assert_eq!(unique_destination(&wanted, &src), dir.join("Intro (2).mp3"));
+
+        std::fs::write(dir.join("Intro (2).mp3"), b"existing").unwrap();
+        assert_eq!(unique_destination(&wanted, &src), dir.join("Intro (3).mp3"));
+
+        // A file never conflicts with itself.
+        assert_eq!(unique_destination(&wanted, &wanted), wanted);
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }

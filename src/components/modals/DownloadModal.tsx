@@ -1,5 +1,7 @@
+import { createPortal } from "react-dom";
+import { useShell } from "../layout/ShellContext";
 import type { RefObject } from "react";
-import { Check, ChevronDown, Download, X } from "lucide-react";
+import { Check, ChevronDown, Download } from "lucide-react";
 import { AUDIO_FORMATS } from "../../app/constants";
 import type { AudioDownloadFormat, DownloadItem, ToolingSupport, TrackSearchResult } from "../../app/types";
 
@@ -75,7 +77,6 @@ export function DownloadModal({
   isSearchingTracks,
   isYtdlpAvailable,
   onAddDownload,
-  onClose,
   onDownloadFormatChange,
   onDownloadFormatMenuToggle,
   onDownloadUrlChange,
@@ -92,6 +93,8 @@ export function DownloadModal({
   ytdlpInstallProgress,
   ytdlpVersion,
 }: DownloadModalProps) {
+  const shell = useShell();
+
   if (!isOpen) {
     return null;
   }
@@ -124,36 +127,20 @@ export function DownloadModal({
             ? "Necesario para MP3, FLAC, OGG y WAV. Puede requerir instalacion manual en esta plataforma."
             : "Required for MP3, FLAC, OGG and WAV. It may need manual setup on this platform.");
 
-  return (
-    <div
-      aria-hidden="true"
-      className="modal-backdrop"
-      onClick={onClose}
-    >
-      <div
+  const page = (
+      <section
         aria-labelledby="download-modal-title"
-        aria-modal="true"
-        className="modal-shell download-modal"
-        onClick={(event) => event.stopPropagation()}
-        role="dialog"
+        className="app-page download-page"
       >
-        <div className="download-modal-header">
-          <div className="download-modal-title-row">
-            <Download aria-hidden="true" className="download-modal-icon ui-icon" size={18} strokeWidth={2.1} />
-            <h2 className="modal-title" id="download-modal-title">
-              {copy.downloadModalTitle}
-            </h2>
-          </div>
-          <button
-            aria-label="Cerrar"
-            className="modal-close-button"
-            onClick={onClose}
-            type="button"
-          >
-            <X aria-hidden="true" size={18} strokeWidth={2.1} />
-          </button>
-        </div>
+        <header className="app-page-header">
+          <h1 className="app-page-title" id="download-modal-title">
+            <Download aria-hidden="true" className="download-modal-icon ui-icon" size={24} strokeWidth={2.1} />
+            {copy.downloadModalTitle}
+          </h1>
+        </header>
 
+        <div className="download-layout">
+        <div className="download-main">
         {toolsMissing ? (
           <div className="setup-screen">
             <p className="setup-screen-hint muted">
@@ -414,7 +401,74 @@ export function DownloadModal({
             </div>
           </>
         )}
-      </div>
-    </div>
+        </div>
+
+        <aside className="download-side">
+          <section className="page-card page-card--compact" aria-labelledby="download-side-tools">
+            <h2 className="page-card-title" id="download-side-tools">
+              {appLanguage === "es" ? "Herramientas" : "Tools"}
+            </h2>
+            {[
+              { name: "yt-dlp", available: isYtdlpAvailable, version: ytdlpVersion },
+              { name: "ffmpeg", available: isFfmpegAvailable, version: ffmpegVersion },
+            ].map((tool) => (
+              <div className="download-side-row" key={tool.name}>
+                <span className={`setup-tool-status ${tool.available === null ? "checking" : tool.available ? "ok" : "missing"}`}>
+                  {tool.available === null ? "…" : tool.available ? "✓" : "✗"}
+                </span>
+                <span className="download-side-row-copy">
+                  <strong>{tool.name}</strong>
+                  <span>
+                    {tool.available === null
+                      ? (appLanguage === "es" ? "Comprobando…" : "Checking…")
+                      : tool.available
+                        ? (tool.version ?? (appLanguage === "es" ? "Instalado" : "Installed"))
+                        : (appLanguage === "es" ? "No encontrado" : "Not found")}
+                  </span>
+                </span>
+              </div>
+            ))}
+            <button className="setup-recheck-btn" onClick={onRecheckDeps} type="button">
+              ↻ {appLanguage === "es" ? "Comprobar" : "Check"}
+            </button>
+          </section>
+
+          <section className="page-card page-card--compact" aria-labelledby="download-side-folder">
+            <h2 className="page-card-title" id="download-side-folder">
+              {appLanguage === "es" ? "Dónde se guardan" : "Where files go"}
+            </h2>
+            <p className="download-side-path" title={scannedPath ?? undefined}>
+              {scannedPath ?? copy.downloadNoFolder}
+            </p>
+            <p className="download-side-note">
+              {appLanguage === "es"
+                ? "Al terminar se vuelve a escanear la carpeta y las canciones aparecen en tu biblioteca."
+                : "When a batch finishes the folder is rescanned and the songs appear in your library."}
+            </p>
+          </section>
+
+          <section className="page-card page-card--compact" aria-labelledby="download-side-formats">
+            <h2 className="page-card-title" id="download-side-formats">
+              {appLanguage === "es" ? "Formatos" : "Formats"}
+            </h2>
+            <ul className="download-side-formats">
+              {AUDIO_FORMATS.map((format) => (
+                <li className={format.id === downloadFormat ? "selected" : undefined} key={format.id}>
+                  <span className="download-item-format">{format.label}</span>
+                  <span>
+                    {format.note
+                      ? (appLanguage === "es" ? "Necesita ffmpeg" : "Needs ffmpeg")
+                      : (appLanguage === "es" ? "Directo, sin convertir" : "Direct, no conversion")}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        </aside>
+        </div>
+      </section>
   );
+
+  // Rendered as a page inside the main area (see AppMainStageHost).
+  return shell.pageRoot ? createPortal(page, shell.pageRoot) : null;
 }

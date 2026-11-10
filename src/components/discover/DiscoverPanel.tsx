@@ -1,9 +1,9 @@
 import { Compass, Download } from "lucide-react";
+import { DiscoverCharts } from "./DiscoverCharts";
 import type {
   DiscoverPreviewState,
   DiscoverTab,
   LastFmArtist,
-  LastFmTrack,
 } from "../../app/types";
 
 type DiscoverCopy = {
@@ -29,7 +29,6 @@ type DiscoverCopy = {
 type DiscoverPanelProps = {
   activeDiscoverPreviewKey: string | null;
   copy: DiscoverCopy;
-  discoverCharts: LastFmTrack[];
   discoverError: string | null;
   discoverForYou: LastFmArtist[];
   discoverForYouPageCount: number;
@@ -52,7 +51,6 @@ type DiscoverPanelProps = {
 export function DiscoverPanel({
   activeDiscoverPreviewKey,
   copy,
-  discoverCharts,
   discoverError,
   discoverForYou,
   discoverForYouPageCount,
@@ -89,7 +87,16 @@ export function DiscoverPanel({
         ))}
       </div>
 
-      {isDiscoverLoading ? (
+      {discoverTab === "charts" ? (
+        <DiscoverCharts
+          activeDiscoverPreviewKey={activeDiscoverPreviewKey}
+          discoverPreviewState={discoverPreviewState}
+          getDiscoverPreviewKey={getDiscoverPreviewKey}
+          getLastFmImage={getLastFmImage}
+          onDownload={onDownload}
+          onPreviewToggle={onPreviewToggle}
+        />
+      ) : isDiscoverLoading ? (
         <div className="discover-empty"><p>{copy.discoverLoading}</p></div>
       ) : discoverError ? (
         <div className="discover-empty error"><p>{discoverError}</p></div>
@@ -213,80 +220,7 @@ export function DiscoverPanel({
             </div>
           </div>
         )
-      ) : discoverCharts.length === 0 ? (
-        <div className="discover-empty"><p>{copy.discoverError}</p></div>
-      ) : (
-        <div className="discover-scroll">
-          <h3 className="discover-section-title">{copy.discoverChartsTitle}</h3>
-          <div className="discover-charts-list">
-            {discoverCharts.map((track, index) => {
-              const artistName = typeof track.artist === "string" ? track.artist : track.artist?.name ?? "";
-              const img = track.coverUrl || getLastFmImage(track.image, "medium");
-              const previewKey = getDiscoverPreviewKey(artistName, track.name);
-              const isPreviewActive = activeDiscoverPreviewKey === previewKey;
-              const isPreviewLoading = isPreviewActive && discoverPreviewState === "loading";
-              const isPreviewUnavailable =
-                isPreviewActive &&
-                (discoverPreviewState === "unavailable" || discoverPreviewState === "error");
-              const isPreviewPlaying = isPreviewActive && discoverPreviewState === "playing";
-
-              return (
-                <div className="discover-chart-row" key={`${track.name}-${index}`}>
-                  <span className="discover-chart-pos">{index + 1}</span>
-                  {img ? (
-                    <img alt={track.name} className="discover-chart-img" src={img} />
-                  ) : (
-                    <div className="discover-chart-img discover-chart-img--placeholder" />
-                  )}
-                  <div className="discover-chart-info">
-                    <button
-                      className={`discover-chart-title discover-track-preview${
-                        isPreviewPlaying ? " is-playing" : ""
-                      }${isPreviewUnavailable ? " is-unavailable" : ""}`}
-                      onClick={() => {
-                        onPreviewToggle(artistName, track.name);
-                      }}
-                      title={
-                        isPreviewLoading
-                          ? copy.discoverPreviewLoading
-                          : isPreviewUnavailable
-                            ? copy.discoverPreviewUnavailable
-                            : isPreviewPlaying
-                              ? copy.discoverPreviewPause
-                              : copy.discoverPreviewPlay
-                      }
-                      type="button"
-                    >
-                      <strong className="discover-track-preview-text">{track.name}</strong>
-                      {isPreviewLoading ? (
-                        <span className="discover-preview-badge">{copy.discoverPreviewLoading}</span>
-                      ) : isPreviewUnavailable ? (
-                        <span className="discover-preview-badge">{copy.discoverPreviewUnavailable}</span>
-                      ) : null}
-                    </button>
-                    <span className="discover-chart-artist">{artistName}</span>
-                  </div>
-                  {track.listeners ? (
-                    <span className="discover-chart-listeners">
-                      {Number(track.listeners).toLocaleString()}
-                    </span>
-                  ) : null}
-                  <button
-                    className="discover-dl-btn"
-                    onClick={() => {
-                      onDownload(`${artistName} ${track.name}`);
-                    }}
-                    title={copy.discoverDownloadHint}
-                    type="button"
-                  >
-                    <Download size={12} strokeWidth={2} />
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
+      ) : null}
     </div>
   );
 }

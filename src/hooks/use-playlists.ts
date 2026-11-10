@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { storageKeys } from "../app/constants";
 import type { AppLanguage, LibraryTrack, SavedPlaylist } from "../app/types";
 import {
@@ -6,6 +6,7 @@ import {
   mergeUniqueTracks,
   parseStoredPlaylists,
   sanitizePlainTextInput,
+  serializePlaylistsForStorage,
   writeStoredValue,
 } from "../app/utils";
 
@@ -81,8 +82,27 @@ export function usePlaylists({
       .includes(normalizedPlaylistSelectionQuery);
   });
 
+  // Single writer for playlist persistence. Artwork and blob sources are stripped
+  // (see serializePlaylistsForStorage) so the payload stays far below the
+  // localStorage quota; artwork comes back when the library scan reconciles tracks.
+  const playlistSaveFailedRef = useRef(false);
+
   useEffect(() => {
-    writeStoredValue(storageKeys.playlists, JSON.stringify(savedPlaylists));
+    const saved = writeStoredValue(
+      storageKeys.playlists,
+      serializePlaylistsForStorage(savedPlaylists),
+    );
+
+    if (!saved && !playlistSaveFailedRef.current) {
+      setStatusMessage(
+        appLanguage === "es"
+          ? "No pude guardar tus playlists en el disco. Los ultimos cambios podrian perderse al cerrar."
+          : "I could not save your playlists to disk. Recent changes may be lost when closing.",
+      );
+    }
+
+    playlistSaveFailedRef.current = !saved;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [savedPlaylists]);
 
   function activatePlaylist(playlistId: string) {
@@ -336,12 +356,6 @@ export function usePlaylists({
     setDragOverPlaylistTrackIndex(index);
   }
 
-  function handlePlaylistTrackDrop(targetIndex: number) {
-    if (!activePlaylist || draggedPlaylistTrackIndex === null || targetIndex < 0) {
-      return;
-    }
-  }
-
   return {
     activatePlaylist,
     activePlaylist,
@@ -357,7 +371,6 @@ export function usePlaylists({
     editingPlaylist,
     filteredPlaylistCandidateTracks,
     handlePlaylistTrackDragStart,
-    handlePlaylistTrackDrop,
     isPlaylistModalOpen,
     isRenamePlaylistModalOpen,
     isTrackPlaylistModalOpen,

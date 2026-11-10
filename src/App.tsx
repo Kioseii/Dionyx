@@ -1,9 +1,17 @@
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import dionyxLogoRaw from "./assets/dionyx-logo.svg?raw";
 import { equalizerBandsConfig, supportedAudioAccept } from "./app/constants";
 import { getEmptyTrack, uiText } from "./app/ui";
 import { AppModalsHost } from "./components/modals/AppModalsHost";
 import { AppMainStageHost } from "./components/layout/AppMainStageHost";
+import { NoticeToast } from "./components/layout/NoticeToast";
+import { NowPlayingView } from "./components/player/NowPlayingView";
+import {
+  type DetailPanelTab,
+  ShellProvider,
+  type ShellContextValue,
+  type ShellPage,
+} from "./components/layout/ShellContext";
 import { TitleBar } from "./components/layout/TitleBar";
 import { AudioNodes } from "./components/player/AudioNodes";
 import { MiniPlayerOverlay } from "./components/player/MiniPlayerOverlay";
@@ -19,7 +27,20 @@ import { useAudioRuntimeStack } from "./hooks/use-audio-runtime-stack";
 import { useBrowserSources } from "./hooks/use-browser-sources";
 import { useDiscover } from "./hooks/use-discover";
 import { usePlayerChromeHostOptions } from "./hooks/use-player-chrome-host-options";
+import { useLibraryBrowse } from "./hooks/use-library-browse";
 import { useLibraryScan } from "./hooks/use-library-scan";
+import { getAlbumKey, getArtistKey } from "./app/library-groups";
+import { useMediaSession } from "./hooks/use-media-session";
+import { useArtworkAccent } from "./hooks/use-artwork-accent";
+import { useKeyboardShortcuts } from "./hooks/use-keyboard-shortcuts";
+import { useResumePosition } from "./hooks/use-resume-position";
+import { useSleepTimer } from "./hooks/use-sleep-timer";
+import { useTrackTransitions } from "./hooks/use-track-transitions";
+import { useLastfm } from "./hooks/use-lastfm";
+import { useDiscoverCharts } from "./hooks/use-discover-charts";
+import { sanitizeCrossfadeSeconds } from "./app/transitions";
+import { SHORTCUT_SEEK_SECONDS, SHORTCUT_VOLUME_STEP } from "./app/shortcuts";
+import { getTrackArtworkSrc, getTrackKey } from "./app/utils";
 import { useLibraryRuntimeState } from "./hooks/use-library-runtime-state";
 import { useMainStageHostOptions } from "./hooks/use-main-stage-host-options";
 import { usePlaybackScrub } from "./hooks/use-playback-scrub";
@@ -29,9 +50,17 @@ import { usePlaylistLibraryStack } from "./hooks/use-playlist-library-stack";
 import { useSidebarHostOptions } from "./hooks/use-sidebar-host-options";
 import { useTrackManagement } from "./hooks/use-track-management";
 import "./App.css";
+import "./styles/shell.css";
+import "./styles/library.css";
+import "./styles/now-playing.css";
+import "./styles/pages.css";
+import "./styles/modals.css";
 
 function App() {
   const directoryInputRef = useRef<HTMLInputElement | null>(null);
+  const [nowPlayingOpen, setNowPlayingOpen] = useState(false);
+  const [homePageOpen, setHomePageOpen] = useState(false);
+  const [pageRoot, setPageRoot] = useState<HTMLElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const audioPreloadRef = useRef<HTMLAudioElement | null>(null);
   const isTransitioningTrackRef = useRef(false);
@@ -41,6 +70,8 @@ function App() {
   const equalizerPresetMenuRef = useRef<HTMLDivElement | null>(null);
   const {
     appLanguage,
+    detailPanelOpen,
+    detailPanelTab,
     fontPresetId,
     hideOnTray,
     isLibrarySortMenuOpen,
@@ -48,6 +79,8 @@ function App() {
     librarySortKey,
     personalizationView,
     setAppLanguage,
+    setDetailPanelOpen,
+    setDetailPanelTab,
     setFontPresetId,
     setHideOnTray,
     setIsLibrarySortMenuOpen,
@@ -60,12 +93,19 @@ function App() {
     sidebarOpen,
     themeColor,
     themeHexDraft,
+    accentFromArtwork,
+    setAccentFromArtwork,
+    crossfadeSeconds,
+    gapless,
+    setCrossfadeSeconds,
+    setGapless,
   } = useAppPreferences();
   const copy = uiText[appLanguage];
   const {
     activeDuration,
     collectionName,
-    currentTrackIndex,
+    currentTrackIndex: storedTrackIndex,
+    currentTrackIndexSetExplicitlyRef,
     isBannerVisible,
     isPlaying,
     isScanning,
@@ -86,6 +126,7 @@ function App() {
     setStatusMessage,
     setTracks,
     statusMessage,
+    syncCurrentTrackIndex,
     tracks,
   } = useLibraryRuntimeState({
     defaultCollectionName: copy.defaultCollectionName,
@@ -93,7 +134,6 @@ function App() {
   });
   const {
     activeDiscoverPreviewKey,
-    discoverCharts,
     discoverError,
     discoverForYou,
     discoverForYouPageCount,
@@ -130,6 +170,16 @@ function App() {
     volume,
   } = usePlayerControlState();
   const { revokeBrowserSources, setUpdatedBrowserSources } = useBrowserSources();
+  const {
+    activeGroup,
+    albumGroups,
+    artistGroups,
+    libraryFilter,
+    libraryFilterIndices,
+    libraryView,
+    setLibraryFilter,
+    setLibraryView,
+  } = useLibraryBrowse({ tracks, variousArtistsLabel: copy.variousArtists });
 
   const {
     beginProgressScrub,
@@ -152,6 +202,7 @@ function App() {
     closeTrackPlaylistModal,
     createPlaylistFromCurrentSource,
     createPlaylistWithTrack,
+    currentTrackIndex,
     deletePlaylist,
     displayTrackRows,
     dragOverPlaylistTrackIndex,
@@ -173,6 +224,7 @@ function App() {
     playbackPlaylistId,
     playbackQueue,
     playbackRate,
+    playLibraryIndices,
     playlistDraftName,
     playlistHasTrack,
     playlistModalMode,
@@ -220,11 +272,13 @@ function App() {
     audioPreloadRef,
     audioRef,
     collectionName,
-    currentTrackIndex,
+    currentTrackIndex: storedTrackIndex,
+    currentTrackIndexSetExplicitlyRef,
     displayTrackIndicesRef,
     handleSeek,
     ignoreNextRowClickRef,
     isTransitioningTrackRef,
+    libraryFilterIndices,
     librarySortKey,
     playbackTime,
     scannedPath,
@@ -235,6 +289,7 @@ function App() {
     setIsPlaying,
     setPlaybackTime,
     setStatusMessage,
+    syncCurrentTrackIndex,
     tracks,
   });
   const {
@@ -267,8 +322,8 @@ function App() {
     setStatusMessage,
     setTracks,
     setUpdatedBrowserSources,
+    selectedTrack,
     statusMessage,
-    tracks,
   });
   const {
     closeDownloadModal,
@@ -372,15 +427,60 @@ function App() {
     trackMenuRef,
   } = useTrackManagement({
     copy,
-    currentTrackIndex,
-    savedPlaylists,
-    setCurrentTrackIndex,
+    selectedTrackKey,
     setIsPlaying,
     setSavedPlaylists,
     setStatusMessage,
     setTracks,
+  });
+  // Sleep timer: fade the volume out over ~3 s, then pause and restore it.
+  const sleepTimer = useSleepTimer(() => {
+    const audio = audioRef.current;
+    if (!audio || audio.paused) {
+      return;
+    }
+
+    const startVolume = audio.volume;
+    const steps = 30;
+    let step = 0;
+    const fade = window.setInterval(() => {
+      step += 1;
+      audio.volume = Math.max(0, startVolume * (1 - step / steps));
+      if (step >= steps) {
+        window.clearInterval(fade);
+        audio.pause();
+        audio.volume = startVolume;
+      }
+    }, 100);
+  });
+  const handleTrackEndedWithSleepTimer = () => {
+    if (sleepTimer.consumeEndOfTrack()) {
+      setIsPlaying(false);
+      return;
+    }
+    handleTrackEnded();
+  };
+  const lastfm = useLastfm({
+    activeDuration,
+    isPlaying,
+    playbackTime,
+    selectedTrack,
+    trackKey: getTrackKey(selectedTrack),
+  });
+  const discoverChartsState = useDiscoverCharts({
+    active: isDiscoverView && discoverTab === "charts",
+    getItunesCover,
+    lastfmUserName: lastfm.userName,
     tracks,
   });
+  useResumePosition({
+    audioRef,
+    isPlaying,
+    playbackTime,
+    selectedTrackPath: selectedTrack.path ?? "",
+    setPlaybackTime,
+  });
+  const artworkAccent = useArtworkAccent(getTrackArtworkSrc(selectedTrack), accentFromArtwork);
   const {
     RepeatIcon,
     VolumeIcon,
@@ -402,7 +502,7 @@ function App() {
       fontPresetId,
       repeatMode,
       selectedEqualizerPresetId,
-      themeColor,
+      themeColor: artworkAccent ?? themeColor,
       volume,
     },
     windowStateOptions: {
@@ -412,6 +512,7 @@ function App() {
   });
   const {
     applyEqualizerPreset,
+    attachElementToEqualizer,
     handleAudioError,
     handleAudioLoadedMetadata,
     handleAudioPause,
@@ -442,6 +543,19 @@ function App() {
     setSelectedEqualizerPresetId,
     setStatusMessage,
     setTracks,
+  });
+  useTrackTransitions({
+    advance: handleTrackEnded,
+    attachElementToEqualizer,
+    audioRef,
+    blocked: repeatMode === "one" || sleepTimer.timer.kind === "end-of-track",
+    crossfadeSeconds,
+    gapless,
+    hasNextTrack:
+      queuePosition < playbackQueue.length - 1 || (repeatMode === "all" && playbackQueue.length > 1),
+    isPlaying,
+    selectedTrackPath: selectedTrack.path ?? "",
+    volume,
   });
   const {
     handleAddDownloadRequest,
@@ -511,7 +625,7 @@ function App() {
       handleAudioLoadedMetadata,
       handleAudioPause,
       handleAudioPlay,
-      handleTrackEnded,
+      handleTrackEnded: handleTrackEndedWithSleepTimer,
       onDiscoverPreviewEnded: handleDiscoverPreviewEnded,
       onDiscoverPreviewError: handleDiscoverPreviewError,
       onDiscoverPreviewPause: handleDiscoverPreviewPause,
@@ -558,6 +672,25 @@ function App() {
     selectedTrack,
     themeStyle,
   });
+  // Downloads, Appearance and Settings used to be modals; they are pages now,
+  // derived from the same open flags so every existing entry point (e.g. the
+  // Discover "download" button) still lands on the right page.
+  const activePage: ShellPage | null = isDownloadModalOpen
+    ? "downloads"
+    : isThemeModalOpen
+      ? personalizationView === "settings"
+        ? "settings"
+        : "appearance"
+      : homePageOpen
+        ? "home"
+        : null;
+
+  function closePages() {
+    setHomePageOpen(false);
+    setIsThemeModalOpen(false);
+    closeDownloadModal();
+  }
+
   const sidebarPropsOptions = useSidebarHostOptions({
     activePlaylistId,
     copy,
@@ -565,13 +698,23 @@ function App() {
     logoMarkup: dionyxLogoRaw,
     onCreatePlaylist: createPlaylistFromCurrentSource,
     onDeletePlaylist: deletePlaylist,
-    onOpenDiscover: handleOpenDiscover,
-    onOpenLibrary: returnToLibraryView,
+    onOpenDiscover: () => {
+      closePages();
+      handleOpenDiscover();
+    },
+    onOpenLibrary: () => {
+      closePages();
+      setLibraryFilter(null);
+      returnToLibraryView();
+    },
     onOpenPlaylistEditor: openPlaylistEditor,
     onOpenPlaylistRename: openPlaylistRenameModal,
     onPlayPlaylistShuffled: playPlaylistShuffled,
     onPlaylistMenuToggle: handlePlaylistMenuToggle,
-    onSelectPlaylist: activatePlaylist,
+    onSelectPlaylist: (playlistId) => {
+      closePages();
+      activatePlaylist(playlistId);
+    },
     openPlaylistMenuId,
     savedPlaylists,
     sidebarOpen,
@@ -690,7 +833,6 @@ function App() {
     activeDiscoverPreviewKey,
     appLanguage,
     directoryInputRef,
-    discoverCharts,
     discoverError,
     discoverForYou,
     discoverForYouPageCount,
@@ -771,10 +913,21 @@ function App() {
     playerChromePropsOptions,
     sidebarPropsOptions,
   });
-  useAppGlobalEffects({
-    activePlaylistOpen: Boolean(activePlaylist),
+  useMediaSession({
+    activeDuration,
     audioRef,
-    currentTrackIndex,
+    isPlaying,
+    onNext: playNextTrack,
+    onPrevious: playPreviousTrack,
+    onSeek: handleSeek,
+    onTogglePlayback: handleTogglePlaybackRequest,
+    selectedTrack,
+  });
+  useAppGlobalEffects({
+    activeDuration,
+    activePlaylistOpen: Boolean(activePlaylist),
+    appLanguage,
+    audioRef,
     equalizerPresetMenuRef,
     equalizerValues,
     getItunesCover,
@@ -785,21 +938,175 @@ function App() {
     isPlaying,
     isPlaylistModalOpen,
     librarySortMenuRef,
-    savedPlaylists,
     selectedEqualizerPresetId,
     selectedTrackArtist: selectedTrack.artist,
+    selectedTrackPath: selectedTrack.path,
     selectedTrackTitle: selectedTrack.title,
     setDragOverPlaylistTrackIndex,
     setDraggedPlaylistTrackIndex,
     setIsEqualizerPresetMenuOpen,
     setIsLibrarySortMenuOpen,
     setPlaylistSelectionQuery,
-    tracks,
+    setStatusMessage,
     volume,
   });
 
+  const openLibraryGroup = (kind: "album" | "artist", key: string) => {
+    closePages();
+    setActivePlaylistId(null);
+    setIsDiscoverView(false);
+    setLibraryView(kind === "album" ? "albums" : "artists");
+    setLibraryFilter({ kind, key });
+  };
+
+  const shellValue: ShellContextValue = {
+    discoverCharts: discoverChartsState,
+    lastfm,
+    playbackTransitions: {
+      crossfadeSeconds,
+      gapless,
+      onCrossfadeSecondsChange: (seconds) => setCrossfadeSeconds(sanitizeCrossfadeSeconds(seconds)),
+      onGaplessChange: setGapless,
+    },
+    sleepTimer: {
+      cancel: sleepTimer.cancel,
+      remainingMs: sleepTimer.remainingMs,
+      startEndOfTrack: sleepTimer.startEndOfTrack,
+      startMinutes: sleepTimer.startMinutes,
+      timer: sleepTimer.timer,
+    },
+    accentFromArtwork,
+    onToggleAccentFromArtwork: () => setAccentFromArtwork(!accentFromArtwork),
+    activePage,
+    onOpenHome: () => {
+      closePages();
+      setHomePageOpen(true);
+    },
+    onPageRootChange: setPageRoot,
+    pageRoot,
+    currentTrack: selectedTrack,
+    isPlaying,
+    onBrowseLibrary: (view) => {
+      closePages();
+      setActivePlaylistId(null);
+      setIsDiscoverView(false);
+      setLibraryFilter(null);
+      setLibraryView(view);
+    },
+    onCreatePlaylist: createPlaylistFromCurrentSource,
+    onOpenDiscover: () => {
+      closePages();
+      handleOpenDiscover();
+    },
+    onOpenPlaylist: (playlistId) => {
+      closePages();
+      activatePlaylist(playlistId);
+    },
+    onTogglePlayback: handleTogglePlaybackRequest,
+    playlists: savedPlaylists,
+    activeGroup,
+    albumGroups,
+    appLanguage,
+    artistGroups,
+    libraryFilter,
+    libraryView,
+    onCloseLibraryGroup: () => setLibraryFilter(null),
+    onOpenAlbum: (key) => openLibraryGroup("album", key),
+    onOpenArtist: (key) => openLibraryGroup("artist", key),
+    onOpenTrackAlbum: (track) => openLibraryGroup("album", getAlbumKey(track)),
+    onOpenTrackArtist: (track) => openLibraryGroup("artist", getArtistKey(track)),
+    onPlayLibraryIndices: (indices, shuffle) => {
+      setActivePlaylistId(null);
+      playLibraryIndices(indices, shuffle);
+    },
+    nowPlayingOpen,
+    onCloseNowPlaying: () => setNowPlayingOpen(false),
+    onOpenNowPlaying: () => {
+      if (selectedTrack.path || selectedTrack.source) {
+        setNowPlayingOpen(true);
+      }
+    },
+    onSetLibraryView: (view) => {
+      setLibraryFilter(null);
+      setLibraryView(view);
+    },
+    activeDownloadCount: downloadQueue.filter(
+      (item) => item.status === "fetching" || item.status === "pending" || item.status === "downloading",
+    ).length,
+    collectionName,
+    copy,
+    detailPanelOpen,
+    detailPanelTab,
+    isNoticeVisible: isBannerVisible,
+    isScanning,
+    libraryTrackCount: tracks.length,
+    onDismissNotice: () => setIsBannerVisible(false),
+    onEnterMiniMode: handleEnterMiniModeRequest,
+    onOpenAppearance: () => {
+      closePages();
+      handleOpenPersonalization("theme");
+    },
+    onOpenDownloads: () => {
+      closePages();
+      openDownloadModal();
+    },
+    onOpenEqualizer: handleOpenEqualizerModal,
+    onOpenSettings: () => {
+      closePages();
+      handleOpenPersonalization("settings");
+      handleOpenSettingsTab();
+    },
+    onScanFolder: handleScanFolderRequest,
+    onShowDetailPanel: (tab: DetailPanelTab) => {
+      if (detailPanelOpen && detailPanelTab === tab) {
+        setDetailPanelOpen(false);
+        return;
+      }
+
+      setDetailPanelTab(tab);
+      setDetailPanelOpen(true);
+    },
+    onToggleDetailPanel: () => setDetailPanelOpen(!detailPanelOpen),
+    scannedPath,
+    statusMessage,
+  };
+
+  const lastAudibleVolumeRef = useRef(volume > 0 ? volume : 0.7);
+  if (volume > 0) {
+    lastAudibleVolumeRef.current = volume;
+  }
+
+  const seekBy = (seconds: number) => {
+    const audio = audioRef.current;
+    if (!audio || !Number.isFinite(audio.duration)) {
+      return;
+    }
+    handleSeek(Math.min(Math.max(audio.currentTime + seconds, 0), audio.duration));
+  };
+
+  useKeyboardShortcuts({
+    "cycle-repeat": cycleRepeatMode,
+    "focus-search": () => {
+      const search = document.getElementById("track-search") as HTMLInputElement | null;
+      search?.focus();
+      search?.select();
+    },
+    "next-track": playNextTrack,
+    "previous-track": playPreviousTrack,
+    "seek-back": () => seekBy(-SHORTCUT_SEEK_SECONDS),
+    "seek-forward": () => seekBy(SHORTCUT_SEEK_SECONDS),
+    "toggle-lyrics": () => shellValue.onShowDetailPanel("lyrics"),
+    "toggle-mute": () => setVolume(volume > 0 ? 0 : lastAudibleVolumeRef.current),
+    "toggle-now-playing": () => (nowPlayingOpen ? setNowPlayingOpen(false) : shellValue.onOpenNowPlaying()),
+    "toggle-playback": () => void handleTogglePlaybackRequest(),
+    "toggle-queue": () => shellValue.onShowDetailPanel("queue"),
+    "toggle-shuffle": toggleShuffle,
+    "volume-down": () => setVolume(Math.max(0, Math.round((volume - SHORTCUT_VOLUME_STEP) * 100) / 100)),
+    "volume-up": () => setVolume(Math.min(1, Math.round((volume + SHORTCUT_VOLUME_STEP) * 100) / 100)),
+  }, !miniMode);
+
   return (
-    <>
+    <ShellProvider value={shellValue}>
       <MiniPlayerOverlay
         {...miniPlayerOverlayProps}
       />
@@ -826,8 +1133,30 @@ function App() {
       <PlayerBar
         {...playerBarProps}
       />
+
+      {nowPlayingOpen && (selectedTrack.path || selectedTrack.source) ? (
+        <NowPlayingView
+          RepeatIcon={RepeatIcon}
+          activeDuration={activeDuration}
+          displayedPlaybackTime={displayedPlaybackTime}
+          isPlaying={isPlaying}
+          onBeginProgressScrub={beginProgressScrub}
+          onCycleRepeatMode={cycleRepeatMode}
+          onPlayNextTrack={playNextTrack}
+          onPlayPreviousTrack={playPreviousTrack}
+          onSeek={handleSeek}
+          onTogglePlayback={handleTogglePlaybackRequest}
+          onToggleShuffle={toggleShuffle}
+          onUpdateProgressScrub={updateProgressScrub}
+          repeatMode={repeatMode}
+          selectedTrack={selectedTrack}
+          shuffleEnabled={shuffleEnabled}
+        />
+      ) : null}
+
+      <NoticeToast />
     </main>
-    </>
+    </ShellProvider>
   );
 }
 

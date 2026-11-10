@@ -1,17 +1,18 @@
 import type { RefObject } from "react";
-import type { LibraryTrack, SavedPlaylist } from "../app/types";
+import type { AppLanguage } from "../app/types";
 import { useAppShellEffects } from "./use-app-shell-effects";
 import { useDiscordPresence } from "./use-discord-presence";
 import { useOverlayControls } from "./use-overlay-controls";
 import { usePersistenceSync } from "./use-persistence-sync";
 
 type UseAppGlobalEffectsOptions = {
+  activeDuration: number;
   activePlaylistOpen: boolean;
+  appLanguage: AppLanguage;
   audioRef: RefObject<HTMLAudioElement | null>;
-  currentTrackIndex: number;
   equalizerPresetMenuRef: RefObject<HTMLDivElement | null>;
   equalizerValues: number[];
-  getItunesCover: (query: string, entity: "musicArtist" | "song") => Promise<string | null>;
+  getItunesCover: (query: string, entity: "musicArtist" | "song", artist?: string) => Promise<string | null>;
   hideOnTray: boolean;
   isEqualizerEnabled: boolean;
   isEqualizerPresetMenuOpen: boolean;
@@ -19,23 +20,24 @@ type UseAppGlobalEffectsOptions = {
   isPlaying: boolean;
   isPlaylistModalOpen: boolean;
   librarySortMenuRef: RefObject<HTMLDivElement | null>;
-  savedPlaylists: SavedPlaylist[];
   selectedEqualizerPresetId: string;
   selectedTrackArtist: string;
+  selectedTrackPath: string;
   selectedTrackTitle: string;
   setDragOverPlaylistTrackIndex: (value: number | null) => void;
   setDraggedPlaylistTrackIndex: (value: number | null) => void;
   setIsEqualizerPresetMenuOpen: (value: boolean) => void;
   setIsLibrarySortMenuOpen: (value: boolean) => void;
   setPlaylistSelectionQuery: (value: string) => void;
-  tracks: LibraryTrack[];
+  setStatusMessage: (value: string) => void;
   volume: number;
 };
 
 export function useAppGlobalEffects({
+  activeDuration,
   activePlaylistOpen,
+  appLanguage,
   audioRef,
-  currentTrackIndex,
   equalizerPresetMenuRef,
   equalizerValues,
   getItunesCover,
@@ -46,26 +48,24 @@ export function useAppGlobalEffects({
   isPlaying,
   isPlaylistModalOpen,
   librarySortMenuRef,
-  savedPlaylists,
   selectedEqualizerPresetId,
   selectedTrackArtist,
+  selectedTrackPath,
   selectedTrackTitle,
   setDragOverPlaylistTrackIndex,
   setDraggedPlaylistTrackIndex,
   setIsEqualizerPresetMenuOpen,
   setIsLibrarySortMenuOpen,
   setPlaylistSelectionQuery,
-  tracks,
+  setStatusMessage,
   volume,
 }: UseAppGlobalEffectsOptions) {
   usePersistenceSync({
-    currentTrackIndex,
     equalizerValues,
     hideOnTray,
     isEqualizerEnabled,
-    savedPlaylists,
     selectedEqualizerPresetId,
-    tracks,
+    selectedTrackPath,
     volume,
   });
 
@@ -90,10 +90,13 @@ export function useAppGlobalEffects({
   });
 
   useDiscordPresence({
+    activeDuration,
+    appLanguage,
     audioRef,
     getItunesCover,
     isPlaying,
     selectedTrackArtist,
     selectedTrackTitle,
+    setStatusMessage,
   });
 }

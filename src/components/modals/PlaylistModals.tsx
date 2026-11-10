@@ -1,3 +1,4 @@
+import { ModalFrame } from "./ModalFrame";
 import type { LibraryTrack, SavedPlaylist } from "../../app/types";
 
 type PlaylistCopy = {
@@ -8,6 +9,10 @@ type PlaylistCopy = {
   markTracks: string;
   name: string;
   searchSongsToAdd: string;
+  selectAllTracks: string;
+  selectAllResults: string;
+  clearTrackSelection: string;
+  selectedTracksCount: string;
   searchTracksPlaceholder: string;
   noSongsToShow: string;
   noSongsToShowBody: string;
@@ -63,21 +68,25 @@ export function PlaylistModal({
     return null;
   }
 
+  const visibleKeys = filteredPlaylistCandidateTracks.map(getTrackKey);
+  const selectedKeySet = new Set(selectedPlaylistTrackKeys);
+  const allVisibleSelected = visibleKeys.length > 0 && visibleKeys.every((key) => selectedKeySet.has(key));
+  const isFiltered = playlistSelectionQuery.trim().length > 0;
+
+  // onToggleTrack updates from the previous keys, so toggling several in a row is safe.
+  const toggleAllVisible = () => {
+    for (const key of visibleKeys) {
+      if (allVisibleSelected || !selectedKeySet.has(key)) {
+        onToggleTrack(key);
+      }
+    }
+  };
+
   return (
-    <div
-      aria-hidden="true"
-      className="modal-backdrop"
-      onClick={onClose}
+    <ModalFrame
+      labelledBy="playlist-modal-title"
+      onClose={onClose}
     >
-      <div
-        aria-labelledby="playlist-modal-title"
-        aria-modal="true"
-        className="modal-shell"
-        onClick={(event) => {
-          event.stopPropagation();
-        }}
-        role="dialog"
-      >
         <p className="eyebrow">
           {playlistModalMode === "edit" ? copy.editPlaylist : copy.newPlaylistTitle}
         </p>
@@ -118,11 +127,23 @@ export function PlaylistModal({
             value={playlistSelectionQuery}
           />
         </label>
+        {visibleKeys.length > 0 ? (
+          <div className="playlist-picker-toolbar">
+            <span className="playlist-picker-count">
+              {copy.selectedTracksCount}: {selectedPlaylistTrackKeys.length}
+            </span>
+            <button className="playlist-picker-select-all" onClick={toggleAllVisible} type="button">
+              {allVisibleSelected
+                ? copy.clearTrackSelection
+                : `${isFiltered ? copy.selectAllResults : copy.selectAllTracks} (${visibleKeys.length})`}
+            </button>
+          </div>
+        ) : null}
         <div className="playlist-picker-list">
           {filteredPlaylistCandidateTracks.length > 0 ? (
             filteredPlaylistCandidateTracks.map((track) => {
               const trackKey = getTrackKey(track);
-              const isSelected = selectedPlaylistTrackKeys.includes(trackKey);
+              const isSelected = selectedKeySet.has(trackKey);
 
               return (
                 <label className={`playlist-picker-item ${isSelected ? "selected" : ""}`} key={trackKey}>
@@ -157,8 +178,7 @@ export function PlaylistModal({
             {playlistModalMode === "edit" ? copy.saveChanges : copy.createPlaylist}
           </button>
         </div>
-      </div>
-    </div>
+    </ModalFrame>
   );
 }
 
@@ -192,20 +212,11 @@ export function TrackPlaylistModal({
   }
 
   return (
-    <div
-      aria-hidden="true"
-      className="modal-backdrop"
-      onClick={onClose}
+    <ModalFrame
+      className="quick-save-modal"
+      labelledBy="track-playlist-modal-title"
+      onClose={onClose}
     >
-      <div
-        aria-labelledby="track-playlist-modal-title"
-        aria-modal="true"
-        className="modal-shell quick-save-modal"
-        onClick={(event) => {
-          event.stopPropagation();
-        }}
-        role="dialog"
-      >
         <p className="eyebrow">{copy.saveSong}</p>
         <h3 id="track-playlist-modal-title">{copy.saveTrackToPlaylist}</h3>
         <p className="muted modal-copy">
@@ -274,8 +285,7 @@ export function TrackPlaylistModal({
             {copy.createAndSave}
           </button>
         </div>
-      </div>
-    </div>
+    </ModalFrame>
   );
 }
 
@@ -301,20 +311,11 @@ export function RenamePlaylistModal({
   }
 
   return (
-    <div
-      aria-hidden="true"
-      className="modal-backdrop"
-      onClick={onClose}
+    <ModalFrame
+      className="quick-save-modal"
+      labelledBy="rename-playlist-modal-title"
+      onClose={onClose}
     >
-      <div
-        aria-labelledby="rename-playlist-modal-title"
-        aria-modal="true"
-        className="modal-shell quick-save-modal"
-        onClick={(event) => {
-          event.stopPropagation();
-        }}
-        role="dialog"
-      >
         <p className="eyebrow">{copy.renamePlaylist}</p>
         <h3 id="rename-playlist-modal-title">{copy.chooseNewName}</h3>
         <label className="modal-field" htmlFor="rename-playlist-input">
@@ -343,7 +344,6 @@ export function RenamePlaylistModal({
             {copy.saveName}
           </button>
         </div>
-      </div>
-    </div>
+    </ModalFrame>
   );
 }

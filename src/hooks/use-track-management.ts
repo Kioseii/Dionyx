@@ -1,7 +1,8 @@
 import { invoke } from "@tauri-apps/api/core";
+import { ask } from "@tauri-apps/plugin-dialog";
 import { type ChangeEvent, useEffect, useRef, useState } from "react";
 import type { LibraryTrack, SavedPlaylist } from "../app/types";
-import { getTrackKey } from "../app/utils";
+import { getTrackArtworkSrc, getTrackKey, isTauriRuntime } from "../app/utils";
 
 type TrackManagementCopy = {
   editMetaArtworkSizeError: string;
@@ -14,9 +15,7 @@ type TrackManagementCopy = {
 
 type UseTrackManagementOptions = {
   copy: TrackManagementCopy;
-  currentTrackIndex: number;
-  savedPlaylists: SavedPlaylist[];
-  setCurrentTrackIndex: (value: number) => void;
+  selectedTrackKey: string;
   setIsPlaying: (value: boolean) => void;
   setSavedPlaylists: (
     value: SavedPlaylist[] | ((previousPlaylists: SavedPlaylist[]) => SavedPlaylist[]),
@@ -25,21 +24,17 @@ type UseTrackManagementOptions = {
   setTracks: (
     value: LibraryTrack[] | ((previousTracks: LibraryTrack[]) => LibraryTrack[]),
   ) => void;
-  tracks: LibraryTrack[];
 };
 
 const ARTWORK_MAX_BYTES = 2 * 1024 * 1024;
 
 export function useTrackManagement({
   copy,
-  currentTrackIndex,
-  savedPlaylists,
-  setCurrentTrackIndex,
+  selectedTrackKey,
   setIsPlaying,
   setSavedPlaylists,
   setStatusMessage,
   setTracks,
-  tracks,
 }: UseTrackManagementOptions) {
   const [openTrackMenuIndex, setOpenTrackMenuIndex] = useState<number | null>(null);
   const trackMenuRef = useRef<HTMLDivElement | null>(null);
@@ -84,7 +79,12 @@ export function useTrackManagement({
   async function handleDeleteTrack(track: LibraryTrack) {
     setOpenTrackMenuIndex(null);
 
-    if (!window.confirm(copy.trackMenuDeleteConfirm)) {
+    // Native dialog: window.confirm is not reliable in every webview (macOS).
+    const confirmed = isTauriRuntime()
+      ? await ask(copy.trackMenuDeleteConfirm, { kind: "warning", title: "DIONYX" }).catch(() => false)
+      : window.confirm(copy.trackMenuDeleteConfirm);
+
+    if (!confirmed) {
       return;
     }
 
@@ -92,29 +92,23 @@ export function useTrackManagement({
       await invoke("delete_track_file", { path: track.path });
 
       const trackKey = getTrackKey(track);
-      const nextTracks = tracks.filter((currentTrack) => getTrackKey(currentTrack) !== trackKey);
-      const nextPlaylists = savedPlaylists.map((playlist) => ({
-        ...playlist,
-        tracks: playlist.tracks.filter((currentTrack) => getTrackKey(currentTrack) !== trackKey),
-      }));
 
-      const deletedOriginalIndex = tracks.findIndex(
-        (currentTrack) => getTrackKey(currentTrack) === trackKey,
-      );
-      let nextTrackIndex = currentTrackIndex;
-
-      if (deletedOriginalIndex >= 0) {
-        if (currentTrackIndex > deletedOriginalIndex) {
-          nextTrackIndex = currentTrackIndex - 1;
-        } else if (currentTrackIndex === deletedOriginalIndex) {
-          nextTrackIndex = Math.min(currentTrackIndex, nextTracks.length - 1);
-          setIsPlaying(false);
-        }
+      // The current index is left alone: the stable selection keeps following
+      // the playing track by key, whichever list (library or playlist) it is
+      // in. Deleting the playing track stops playback on its neighbour.
+      if (trackKey === selectedTrackKey) {
+        setIsPlaying(false);
       }
 
-      setTracks(nextTracks);
-      setSavedPlaylists(nextPlaylists);
-      setCurrentTrackIndex(Math.max(0, nextTrackIndex));
+      setTracks((previousTracks) =>
+        previousTracks.filter((currentTrack) => getTrackKey(currentTrack) !== trackKey),
+      );
+      setSavedPlaylists((previousPlaylists) =>
+        previousPlaylists.map((playlist) => ({
+          ...playlist,
+          tracks: playlist.tracks.filter((currentTrack) => getTrackKey(currentTrack) !== trackKey),
+        })),
+      );
       setStatusMessage(copy.trackDeleteSuccess);
     } catch {
       setStatusMessage(copy.trackDeleteError);
@@ -127,7 +121,7 @@ export function useTrackManagement({
     setEditMetaTitle(track.title);
     setEditMetaArtist(track.artist);
     setEditMetaAlbum(track.album);
-    setEditMetaArtworkPreview(track.artworkDataUrl ?? null);
+    setEditMetaArtworkPreview(getTrackArtworkSrc(track));
     setEditMetaArtworkB64(null);
     setEditMetaArtworkMime(null);
     setEditMetaArtworkError(null);
@@ -190,7 +184,12 @@ export function useTrackManagement({
         title: editMetaTitle.trim() || editMetaTrack.title,
         artist: editMetaArtist.trim() || editMetaTrack.artist,
         album: editMetaAlbum.trim() || editMetaTrack.album,
-        artworkDataUrl: editMetaArtworkPreview ?? editMetaTrack.artworkDataUrl,
+        // Only a newly picked image replaces the cover; otherwise keep the
+        // cached file (artworkPath) or inline image the track already had.
+        artworkDataUrl:
+          editMetaArtworkB64 && editMetaArtworkPreview
+            ? editMetaArtworkPreview
+            : editMetaTrack.artworkDataUrl,
       };
 
       const trackKey = getTrackKey(editMetaTrack);

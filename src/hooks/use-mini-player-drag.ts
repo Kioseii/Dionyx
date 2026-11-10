@@ -1,7 +1,7 @@
 import { availableMonitors, getCurrentWindow } from "@tauri-apps/api/window";
 import { PhysicalPosition } from "@tauri-apps/api/dpi";
 import type { MouseEvent as ReactMouseEvent } from "react";
-import { clampToDesktopBounds } from "../app/utils";
+import { clampRectToMonitors } from "../app/window-geometry";
 
 export function useMiniPlayerDrag() {
   function handleMiniPlayerMouseDown(e: ReactMouseEvent<HTMLElement>) {
@@ -27,11 +27,10 @@ export function useMiniPlayerDrag() {
         const onMouseMove = (me: MouseEvent) => {
           let newX = initialPos.x + (me.screenX - startMouseX) * dpr;
           let newY = initialPos.y + (me.screenY - startMouseY) * dpr;
-          const clamped = clampToDesktopBounds(
-            newX,
-            newY,
-            winSize.width,
-            winSize.height,
+          // Clamp to the monitor under the window (not the bounding box of
+          // all monitors, which allows positions in gaps between screens).
+          const clamped = clampRectToMonitors(
+            { x: newX, y: newY, width: winSize.width, height: winSize.height },
             monitors,
           );
           newX = clamped.x;

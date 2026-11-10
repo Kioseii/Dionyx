@@ -39,7 +39,12 @@ export type LibraryTrack = {
   quality: string;
   duration: string;
   path: string;
+  /** Cover cached on disk by the scan (preferred, served via asset protocol). */
+  artworkPath?: string | null;
+  /** Inline cover: browser mode, freshly edited metadata, or cache fallback. */
   artworkDataUrl?: string | null;
+  /** File modification time in Unix seconds ("recently added"). */
+  modifiedAt?: number | null;
   source?: string;
 };
 
