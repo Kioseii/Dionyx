@@ -9,7 +9,9 @@ import type {
 } from "../app/types";
 import { normalizeDiscoverLookup } from "../app/utils";
 import { lastfmPublicGet } from "../app/lastfm-public";
-import { findCover, isLastfmPlaceholder } from "../app/covers";
+import { findCover, findDeezerPreview, isLastfmPlaceholder } from "../app/covers";
+
+const PREVIEW_CACHE_MS = 10 * 60 * 1000;
 
 
 type UseDiscoverOptions = {
@@ -22,7 +24,8 @@ export function useDiscover({
   tracks,
 }: UseDiscoverOptions) {
   const discoverPreviewAudioRef = useRef<HTMLAudioElement | null>(null);
-  const discoverPreviewCacheRef = useRef(new Map<string, string | null>());
+  // Preview links (Deezer's expire after ~15 min): kept for 10 minutes.
+  const discoverPreviewCacheRef = useRef(new Map<string, { at: number; url: string }>());
   const discoverPreviewRequestIdRef = useRef(0);
 
   const [isDiscoverView, setIsDiscoverView] = useState(false);
@@ -168,16 +171,20 @@ export function useDiscover({
     setActiveDiscoverPreviewUrl(null);
     setDiscoverPreviewState("loading");
 
-    const cachedUrl = discoverPreviewCacheRef.current.get(previewKey);
-    const previewUrl =
-      typeof cachedUrl !== "undefined" ? cachedUrl : await getItunesPreviewUrl(artistName, trackName);
+    const cached = discoverPreviewCacheRef.current.get(previewKey);
+    const isFresh = cached && Date.now() - cached.at < PREVIEW_CACHE_MS;
+    // Deezer first (iTunes rate-limits quickly), iTunes as backup.
+    const previewUrl = isFresh
+      ? cached.url
+      : (await findDeezerPreview(artistName, trackName).catch(() => "")) ||
+        (await getItunesPreviewUrl(artistName, trackName));
 
     if (requestId !== discoverPreviewRequestIdRef.current) {
       return;
     }
 
-    if (typeof cachedUrl === "undefined") {
-      discoverPreviewCacheRef.current.set(previewKey, previewUrl || null);
+    if (!isFresh && previewUrl) {
+      discoverPreviewCacheRef.current.set(previewKey, { at: Date.now(), url: previewUrl });
     }
 
     if (!previewUrl) {
