@@ -30,6 +30,8 @@ export const storageKeys = {
   autoUpdateCheck: "dionyx:auto-update-check",
   updateDismissed: "dionyx:update-dismissed",
   crossfadeSeconds: "dionyx:crossfade-seconds",
+  normalization: "dionyx:normalization",
+  normalizationPreamp: "dionyx:normalization-preamp",
   volume: "dionyx:volume",
   playlists: "dionyx:playlists",
   themeColor: "dionyx:theme-color",

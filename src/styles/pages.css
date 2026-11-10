@@ -768,3 +768,42 @@
   color: var(--on-accent, #fefbff);
   border-color: transparent;
 }
+
+/* Ajustes > Reproducción: modo de normalización. */
+.normalization-modes {
+  display: inline-flex;
+  align-self: flex-start;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.normalization-mode {
+  min-height: 30px;
+  padding: 0 14px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: rgb(var(--text-soft-rgb) / 0.85);
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 140ms ease, color 140ms ease;
+}
+
+.normalization-mode:hover {
+  color: rgb(var(--text-bright-rgb));
+}
+
+.normalization-mode.active {
+  background: linear-gradient(135deg, rgb(var(--accent-rgb)) 0%, rgb(var(--accent-deep-rgb)) 100%);
+  color: var(--on-accent, #fefbff);
+}
+
+.normalization-mode:focus-visible {
+  outline: 2px solid rgb(var(--accent-rgb) / 0.6);
+  outline-offset: 2px;
+}

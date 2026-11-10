@@ -28,6 +28,13 @@ export type ShellContextValue = {
   discoverCharts: ReturnType<typeof useDiscoverCharts>;
   /** Last.fm account and scrobbling (Settings). */
   lastfm: ReturnType<typeof useLastfm>;
+  /** Volume normalization from ReplayGain tags (Settings > Playback). */
+  normalization: {
+    mode: import("../../app/normalization").NormalizationMode;
+    onModeChange: (mode: import("../../app/normalization").NormalizationMode) => void;
+    onPreampChange: (db: number) => void;
+    preampDb: number;
+  };
   /** Song-to-song transitions (Settings > Playback). */
   playbackTransitions: {
     crossfadeSeconds: number;

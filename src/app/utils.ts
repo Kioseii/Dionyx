@@ -173,7 +173,14 @@ export function sanitizeTrack(track: LibraryTrack): LibraryTrack {
     modifiedAt:
       typeof track.modifiedAt === "number" && Number.isFinite(track.modifiedAt) ? track.modifiedAt : undefined,
     artworkDataUrl: safeArtworkDataUrl,
+    replayGainTrack: finiteOrUndefined(track.replayGainTrack),
+    replayGainAlbum: finiteOrUndefined(track.replayGainAlbum),
+    replayGainPeak: finiteOrUndefined(track.replayGainPeak),
   };
+}
+
+function finiteOrUndefined(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
 
 /** Image URL for a track's cover, or null when it has none. */

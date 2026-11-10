@@ -31,6 +31,8 @@ type UseAppGlobalEffectsOptions = {
   setPlaylistSelectionQuery: (value: string) => void;
   setStatusMessage: (value: string) => void;
   volume: number;
+  /** What the audio element plays at: volume × the song's normalization. */
+  outputVolume: number;
 };
 
 export function useAppGlobalEffects({
@@ -59,6 +61,7 @@ export function useAppGlobalEffects({
   setPlaylistSelectionQuery,
   setStatusMessage,
   volume,
+  outputVolume,
 }: UseAppGlobalEffectsOptions) {
   usePersistenceSync({
     equalizerValues,
@@ -75,7 +78,7 @@ export function useAppGlobalEffects({
     isPlaylistModalOpen,
     setIsLibrarySortMenuOpen,
     setPlaylistSelectionQuery,
-    volume,
+    volume: outputVolume,
   });
 
   useOverlayControls({
