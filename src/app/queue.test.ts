@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { planQueueUpdate, type QueueBuildState, type QueuePlanInput } from "./queue";
+import { moveQueueItem, planQueueUpdate, type QueueBuildState, type QueuePlanInput } from "./queue";
 
 // Deterministic "shuffle": start track first, the rest reversed.
 const fakeShuffle = (indices: number[], start: number) => [
@@ -114,5 +114,20 @@ describe("planQueueUpdate", () => {
   it("clears the queue when the source is empty", () => {
     expect(planQueueUpdate(input({ sourceLength: 0 }))).toMatchObject({ kind: "rebuild", queue: [], position: 0 });
     expect(planQueueUpdate(input({ sourceLength: 0, queue: [], queuePosition: 0 }))).toEqual({ kind: "none" });
+  });
+});
+
+describe("moveQueueItem", () => {
+  const queue = [10, 11, 12, 13, 14];
+
+  it("moves a song within Up next", () => {
+    expect(moveQueueItem(queue, 1, 4, 2)).toEqual([10, 11, 14, 12, 13]);
+    expect(moveQueueItem(queue, 1, 2, 4)).toEqual([10, 11, 13, 14, 12]);
+  });
+
+  it("never touches the current or already played songs", () => {
+    expect(moveQueueItem(queue, 1, 1, 3)).toBe(queue);
+    expect(moveQueueItem(queue, 1, 3, 0)).toBe(queue);
+    expect(moveQueueItem(queue, 1, 3, 9)).toBe(queue);
   });
 });

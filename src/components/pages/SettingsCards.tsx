@@ -25,6 +25,7 @@ export function LibrarySettingsCard() {
         <FolderOpen aria-hidden="true" size={16} strokeWidth={2} />
         {isScanning ? copy.scanning : copy.settingsChooseFolder}
       </button>
+      <LyricsCacheRow />
     </div>
   );
 }
@@ -309,6 +310,45 @@ export function AboutSettingsCard() {
           {updater.status === "error" ? <p className="muted settings-copy">{copy.updateError}</p> : null}
         </div>
       ) : null}
+    </div>
+  );
+}
+
+/** Settings row: lyrics saved for offline use, with a button to clear them. */
+export function LyricsCacheRow() {
+  const { copy } = useShell();
+  const [info, setInfo] = useState<{ bytes: number; count: number } | null>(null);
+
+  const refresh = () => {
+    void import("@tauri-apps/api/core")
+      .then(({ invoke }) => invoke<[number, number]>("lyrics_cache_info"))
+      .then(([count, bytes]) => setInfo({ bytes, count }))
+      .catch(() => setInfo(null));
+  };
+
+  useEffect(() => {
+    if (isTauriRuntime()) refresh();
+  }, []);
+
+  if (!isTauriRuntime() || !info) return null;
+
+  return (
+    <div className="transition-row lyrics-cache-row">
+      <span className="muted settings-copy">
+        {copy.lyricsCacheLabel}: {info.count} · {(info.bytes / (1024 * 1024)).toFixed(1)} MB
+      </span>
+      <button
+        className="settings-option"
+        disabled={info.count === 0}
+        onClick={() => {
+          void import("@tauri-apps/api/core")
+            .then(({ invoke }) => invoke("lyrics_cache_clear"))
+            .finally(refresh);
+        }}
+        type="button"
+      >
+        {copy.lyricsCacheClear}
+      </button>
     </div>
   );
 }

@@ -113,3 +113,22 @@ export function planQueueUpdate(input: QueuePlanInput): QueuePlan {
     state: { sourceId, sourceLength, shuffle, sortKey, linearBase: [...linearBase] },
   };
 }
+
+/**
+ * Moves one song of "Up next" (positions after the current one) to another
+ * spot of "Up next". The current song and the ones already played never
+ * move, so the position being played stays valid. Out-of-range moves are
+ * ignored (same array returned).
+ */
+export function moveQueueItem(queue: number[], queuePosition: number, from: number, to: number) {
+  const first = queuePosition + 1;
+  const last = queue.length - 1;
+  if (from === to || from < first || from > last || to < first || to > last) {
+    return queue;
+  }
+
+  const next = [...queue];
+  const [moved] = next.splice(from, 1);
+  next.splice(to, 0, moved);
+  return next;
+}

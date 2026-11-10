@@ -1,5 +1,5 @@
 import { getTrackArtworkSrc } from "../../app/utils";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ListMusic, Maximize2, PanelRightClose, PictureInPicture2, SlidersHorizontal } from "lucide-react";
 import { type DetailPanelTab, useShell } from "../layout/ShellContext";
 import type { LibraryTrack, SavedPlaylist } from "../../app/types";
@@ -19,6 +19,7 @@ type DetailPanelCopy = {
   playingFrom: string;
   queue: string;
   queueEmpty: string;
+  queueDragHint: string;
   removeFromPlaylist: string;
   saveToPlaylist: string;
   tracksWord: string;
@@ -73,6 +74,8 @@ export function DetailPanel({
   const shell = useShell();
   const tab = shell.detailPanelTab;
   const activeLyricLineRef = useRef<HTMLButtonElement | null>(null);
+  const [dragFrom, setDragFrom] = useState<number | null>(null);
+  const [dropTarget, setDropTarget] = useState<number | null>(null);
   const lyrics = useTrackLyrics({
     activeDuration,
     displayedPlaybackTime,
@@ -359,13 +362,50 @@ export function DetailPanel({
               const end = Math.min(queueRows.length, queuePosition + AFTER + 1);
               const visible = queueRows.slice(start, end);
 
-              return visible.map(({ position, track }) => (
+              const lastPosition = queueRows.length - 1;
+
+              return visible.map(({ position, track }) => {
+                const movable = position > queuePosition;
+                return (
                 <button
-                  className={`queue-item ${position === queuePosition ? "active" : ""}`}
+                  className={`queue-item ${position === queuePosition ? "active" : ""}${movable ? " movable" : ""}${
+                    dragFrom === position ? " dragging" : ""
+                  }${dropTarget === position && dragFrom !== position ? " drop-target" : ""}`}
+                  draggable={movable}
                   key={`${getTrackKey(track)}-${position}`}
                   onClick={() => {
                     onJumpToQueuePosition(position);
                   }}
+                  onDragEnd={() => {
+                    setDragFrom(null);
+                    setDropTarget(null);
+                  }}
+                  onDragOver={(event) => {
+                    if (dragFrom === null || !movable) return;
+                    event.preventDefault();
+                    event.dataTransfer.dropEffect = "move";
+                    if (dropTarget !== position) setDropTarget(position);
+                  }}
+                  onDragStart={(event) => {
+                    if (!movable) return;
+                    event.dataTransfer.effectAllowed = "move";
+                    event.dataTransfer.setData("text/plain", String(position));
+                    setDragFrom(position);
+                  }}
+                  onDrop={(event) => {
+                    event.preventDefault();
+                    if (dragFrom !== null && movable) shell.onMoveUpNext(dragFrom, position);
+                    setDragFrom(null);
+                    setDropTarget(null);
+                  }}
+                  onKeyDown={(event) => {
+                    // Alt+↑/↓ moves the focused song within "Up next".
+                    if (!movable || !event.altKey || (event.key !== "ArrowUp" && event.key !== "ArrowDown")) return;
+                    event.preventDefault();
+                    const target = event.key === "ArrowUp" ? position - 1 : position + 1;
+                    if (target > queuePosition && target <= lastPosition) shell.onMoveUpNext(position, target);
+                  }}
+                  title={movable ? copy.queueDragHint : undefined}
                   type="button"
                 >
                   {position === queuePosition ? (
@@ -392,7 +432,8 @@ export function DetailPanel({
                   </div>
                   <span className="queue-item-time">{track.duration}</span>
                 </button>
-              ));
+                );
+              });
             })() : (
               <div className="queue-empty">
                 <strong>{copy.queueEmpty}</strong>

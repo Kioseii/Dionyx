@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import type { MutableRefObject, RefObject } from "react";
-import { planQueueUpdate, type QueueBuildState } from "../app/queue";
+import { moveQueueItem, planQueueUpdate, type QueueBuildState } from "../app/queue";
 import type { LibrarySortKey, LibraryTrack, RepeatMode } from "../app/types";
 import {
   buildShuffledQueueFromIndices,
@@ -333,7 +333,13 @@ export function usePlaybackNavigation({
     }
   }, [audioPreloadRef, playbackQueue, playbackTracks, queuePosition]);
 
+  /** Reorders "Up next" (see moveQueueItem): the current song never moves. */
+  function moveUpNext(from: number, to: number) {
+    setPlaybackQueue((queue) => moveQueueItem(queue, queuePosition, from, to));
+  }
+
   return {
+    moveUpNext,
     cyclePlaybackRate,
     cycleRepeatMode,
     handleTrackEnded,
