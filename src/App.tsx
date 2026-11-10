@@ -38,6 +38,7 @@ import { useSleepTimer } from "./hooks/use-sleep-timer";
 import { useTrackTransitions } from "./hooks/use-track-transitions";
 import { useLastfm } from "./hooks/use-lastfm";
 import { useDiscoverCharts } from "./hooks/use-discover-charts";
+import { useAppUpdater } from "./hooks/use-app-updater";
 import { sanitizeCrossfadeSeconds } from "./app/transitions";
 import { SHORTCUT_SEEK_SECONDS, SHORTCUT_VOLUME_STEP } from "./app/shortcuts";
 import { getTrackArtworkSrc, getTrackKey } from "./app/utils";
@@ -467,6 +468,7 @@ function App() {
     selectedTrack,
     trackKey: getTrackKey(selectedTrack),
   });
+  const updater = useAppUpdater();
   const discoverChartsState = useDiscoverCharts({
     active: isDiscoverView && discoverTab === "charts",
     getItunesCover,
@@ -960,6 +962,7 @@ function App() {
   };
 
   const shellValue: ShellContextValue = {
+    updater,
     discoverCharts: discoverChartsState,
     lastfm,
     playbackTransitions: {
