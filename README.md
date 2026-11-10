@@ -18,8 +18,8 @@ English · [Español](README.es.md)
 </div>
 
 <!--
-  Screenshots: save them in docs/screenshots/ and uncomment, e.g.
-  <p align="center"><img src="docs/screenshots/library.png" width="860" alt="Library view" /></p>
+  Screenshots: save them in assets/screenshots/ and uncomment, e.g.
+  <p align="center"><img src="assets/screenshots/library.png" width="860" alt="Library view" /></p>
 -->
 
 DIONYX plays the music you already have on your computer. It reads your folders, organizes them into albums and artists, shows synced lyrics, and lets you shape the sound and the look of the app to your taste. Nothing is uploaded: your files never leave your machine.
@@ -52,6 +52,7 @@ DIONYX plays the music you already have on your computer. It reads your folders,
 - Pick **any accent color**, or let it **follow the album cover**.
 - Several font presets, with a live preview.
 - Interface in **English and Spanish**.
+- Settings organized in clear sections, with an index to jump around.
 
 ### 🧭 Discover & Last.fm
 - **Similar artists** to the ones in your library.
@@ -66,9 +67,27 @@ DIONYX plays the music you already have on your computer. It reads your folders,
 
 ## Download
 
-Get the latest **`DIONYX_x.y.z_x64-setup.exe`** (Windows) from the [Releases](../../releases/latest) page. It installs for your user, no admin rights needed, and **updates itself** when a new version comes out.
+Get the latest **`DIONYX_x.y.z_x64-setup.exe`** (Windows 10/11, 64-bit) from the [Releases](../../releases/latest) page. It installs for your user, no admin rights needed, and **updates itself** when a new version comes out (you can turn that off in Settings › About).
+
+> **"Windows protected your PC"?** The installer is not signed with a paid code-signing certificate, so SmartScreen may warn the first time. Click **More info → Run anyway**. Updates are still verified with DIONYX's own signature.
 
 You can also build DIONYX yourself (see below).
+
+## Getting started
+
+1. **Choose your music folder** in Settings › Library (or the button in the sidebar). DIONYX keeps watching it, so new files appear on their own.
+2. **Optional: connect Last.fm** in Settings › Last.fm to scrobble, sync ❤ Favorites with your Loved Tracks and get charts from your own taste.
+3. **Optional: downloads** need yt-dlp and ffmpeg; install them with one click in Settings › Downloads.
+
+Settings › Keyboard shortcuts lists every shortcut.
+
+## Privacy
+
+Your music and your listening history stay on your computer. DIONYX only goes online for:
+- **Lyrics** (LRCLIB), **covers and previews** (Deezer, iTunes) and **Discover** (Last.fm): it sends the artist and song names it looks up.
+- **Last.fm**, only if you connect your account: what you play, to scrobble it, and your ❤ changes.
+- **Updates**: it checks this repository's latest release.
+- **Discord**, only if Discord is open: the song you are playing, shown on your profile.
 
 ## Build from source
 
@@ -77,9 +96,8 @@ You can also build DIONYX yourself (see below).
 ```bash
 npm install
 npm run tauri dev      # run in development
-npm run tauri build    # create the installer (src-tauri/target/release/bundle)
+npm run tauri build    # create the installer (src-tauri/target/release/bundle/nsis)
 ```
-
 
 ### Optional: Last.fm scrobbling
 
@@ -96,7 +114,16 @@ cd src-tauri && cargo test && cargo clippy    # back-end tests and lints
 | Folder | What lives there |
 | --- | --- |
 | `src/` | React + TypeScript interface (`components/`, `hooks/`, pure logic in `app/`) |
-| `src-tauri/` | Rust back end: library scan, tags, downloads, Last.fm signing, tray |
+| `src-tauri/` | Rust back end: library scan, tags, folder watcher, history, lyrics cache, downloads, Last.fm signing, tray |
+| `.github/workflows/` | Release workflow: builds, signs and publishes the Windows installer |
+
+### Publishing a version
+
+1. Set the new version in `package.json`, `src-tauri/tauri.conf.json` and `src-tauri/Cargo.toml`.
+2. Push a tag with the same number: `git tag v1.5.1` then `git push origin v1.5.1`.
+3. GitHub Actions builds the signed installer and publishes the release with `latest.json`; installed copies offer the update.
+
+The workflow needs the repository secrets `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` (and, for scrobbling in releases, `DIONYX_LASTFM_API_KEY` and `DIONYX_LASTFM_API_SECRET`).
 
 ## Credits
 
