@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from "react";
 import { isTauriRuntime } from "../../app/utils";
 import { BarChart3, Compass, Download, FileInput, FolderOpen, Heart, House, ListMusic, Palette, Plus, RefreshCw, Settings } from "lucide-react";
 import { countLabel } from "../../app/library-groups";
@@ -58,6 +59,23 @@ export function Sidebar({
   logoMarkup,
 }: SidebarProps) {
   const shell = useShell();
+  // Whether the playlist list has more below (shows a soft fade instead of a scrollbar).
+  const playlistListRef = useRef<HTMLDivElement | null>(null);
+  const [listHasMore, setListHasMore] = useState(false);
+  useEffect(() => {
+    const list = playlistListRef.current;
+    if (!list) return;
+    const update = () => setListHasMore(list.scrollTop + list.clientHeight < list.scrollHeight - 2);
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(list);
+    for (const child of Array.from(list.children)) observer.observe(child);
+    list.addEventListener("scroll", update, { passive: true });
+    return () => {
+      observer.disconnect();
+      list.removeEventListener("scroll", update);
+    };
+  }, [savedPlaylists.length]);
   const libraryName = shell.scannedPath ? shell.collectionName : shell.copy.noLibraryFolder;
   const page = shell.activePage;
   const isLibraryActive = !page && !isDiscoverView && !activePlaylistId;
@@ -149,7 +167,7 @@ export function Sidebar({
             <Plus aria-hidden="true" size={16} strokeWidth={2.2} />
           </button>
         </div>
-        <div className="playlist-list">
+        <div className="playlist-list" data-more={listHasMore ? "true" : undefined} ref={playlistListRef}>
           <div className="playlist-options-shell">
             <button
               className={`playlist-item playlist-item--favorites ${!page && shell.libraryFilter?.kind === "favorites" ? "selected" : ""}`}
