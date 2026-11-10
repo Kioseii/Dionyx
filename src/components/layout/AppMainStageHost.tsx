@@ -30,7 +30,8 @@ export function AppMainStageHost({
 
   return (
     <section className="main-stage">
-      <TopBar {...topBarProps} />
+      {/* Settings and Appearance have nothing to search. */}
+      {activePage === "settings" || activePage === "appearance" ? null : <TopBar {...topBarProps} />}
 
       <UpdateNotice />
 
