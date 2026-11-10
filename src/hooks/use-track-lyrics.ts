@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { brandName } from "../app/constants";
+import { comparableName } from "../app/covers";
 import type { LibraryTrack } from "../app/types";
 import {
   isTauriRuntime,
@@ -124,10 +125,12 @@ function getLyricsTrackDuration(activeDuration: number, selectedTrack: LibraryTr
 }
 
 function buildLyricsCacheKey(selectedTrack: LibraryTrack, durationSeconds: number) {
+  // comparableName keeps every script (a Latin-only normalizer would turn
+  // Japanese titles into "" and make different songs share lyrics).
   return [
-    normalizeDiscoverLookup(selectedTrack.title),
-    normalizeDiscoverLookup(selectedTrack.artist),
-    normalizeDiscoverLookup(selectedTrack.album),
+    comparableName(selectedTrack.title),
+    comparableName(selectedTrack.artist),
+    comparableName(selectedTrack.album),
     durationSeconds,
   ].join("::");
 }
@@ -402,8 +405,73 @@ const IDLE_LYRICS: TrackLyricsResult = {
 const lyricsResultCache = new Map<string, TrackLyricsResult>();
 const lyricsInFlight = new Map<string, Promise<TrackLyricsResult>>();
 
-async function loadTrackLyrics(selectedTrack: LibraryTrack, durationSeconds: number): Promise<TrackLyricsResult> {
-  const candidate = await getLyricsCandidate(selectedTrack, durationSeconds);
+/** "No lyrics found" answers are asked again after this long. */
+const LYRICS_MISS_RETRY_MS = 30 * 24 * 60 * 60 * 1000;
+
+type CachedLyrics = { candidate: LrclibResponse | null; savedAt: number };
+
+/**
+ * Lyrics source, in order: a `.lrc` file next to the song, the copy saved on
+ * this computer, then LRCLIB (saved for next time). Offline, a saved copy is
+ * used even if it is old.
+ */
+async function getLyricsCandidateOfflineFirst(
+  selectedTrack: LibraryTrack,
+  durationSeconds: number,
+  cacheKey: string,
+): Promise<{ candidate: LrclibResponse | null; source: string }> {
+  const inApp = isTauriRuntime();
+
+  if (inApp && selectedTrack.path) {
+    const lrc = await invoke<string | null>("lyrics_read_lrc", { path: selectedTrack.path }).catch(() => null);
+    if (lrc) {
+      const synced = /\[\d{1,2}:\d{2}/.test(lrc);
+      return { candidate: synced ? { syncedLyrics: lrc } : { plainLyrics: lrc }, source: ".lrc" };
+    }
+  }
+
+  let cached: CachedLyrics | null = null;
+  if (inApp) {
+    try {
+      const raw = await invoke<string | null>("lyrics_cache_get", { key: cacheKey });
+      cached = raw ? (JSON.parse(raw) as CachedLyrics) : null;
+    } catch {
+      cached = null;
+    }
+  }
+
+  if (cached && (cached.candidate || Date.now() - cached.savedAt < LYRICS_MISS_RETRY_MS)) {
+    return { candidate: cached.candidate, source: "LRCLIB" };
+  }
+
+  try {
+    const candidate = await getLyricsCandidate(selectedTrack, durationSeconds);
+    if (inApp) {
+      const saved: CachedLyrics = {
+        candidate: candidate
+          ? {
+              instrumental: candidate.instrumental,
+              plainLyrics: candidate.plainLyrics,
+              syncedLyrics: candidate.syncedLyrics,
+            }
+          : null,
+        savedAt: Date.now(),
+      };
+      void invoke("lyrics_cache_set", { key: cacheKey, value: JSON.stringify(saved) }).catch(() => {});
+    }
+    return { candidate, source: "LRCLIB" };
+  } catch (error) {
+    if (cached) return { candidate: cached.candidate, source: "LRCLIB" };
+    throw error;
+  }
+}
+
+async function loadTrackLyrics(
+  selectedTrack: LibraryTrack,
+  durationSeconds: number,
+  cacheKey: string,
+): Promise<TrackLyricsResult> {
+  const { candidate, source } = await getLyricsCandidateOfflineFirst(selectedTrack, durationSeconds, cacheKey);
 
   if (!candidate) {
     return { ...IDLE_LYRICS, status: "empty" };
@@ -422,7 +490,7 @@ async function loadTrackLyrics(selectedTrack: LibraryTrack, durationSeconds: num
     isInstrumental: Boolean(candidate.instrumental),
     isSynced: parsedSyncedLines.length > 0,
     lines: withRomanji,
-    sourceLabel: "LRCLIB",
+    sourceLabel: source,
     status: withRomanji.length > 0 || candidate.instrumental ? "ready" : "empty",
   };
 }
@@ -431,7 +499,7 @@ function getSharedLyrics(cacheKey: string, selectedTrack: LibraryTrack, duration
   let pending = lyricsInFlight.get(cacheKey);
 
   if (!pending) {
-    pending = loadTrackLyrics(selectedTrack, durationSeconds)
+    pending = loadTrackLyrics(selectedTrack, durationSeconds, cacheKey)
       .then((loaded) => {
         lyricsResultCache.set(cacheKey, loaded);
         return loaded;

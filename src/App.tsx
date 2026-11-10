@@ -289,6 +289,7 @@ function App() {
     cycleRepeatMode,
     handleTrackEnded,
     jumpToQueuePosition,
+    moveUpNext,
   } = usePlaylistLibraryStack({
     activeDuration,
     appLanguage,
@@ -1067,6 +1068,7 @@ function App() {
     onOpenAlbum: (key) => openLibraryGroup("album", key),
     onOpenArtist: (key) => openLibraryGroup("artist", key),
     favoritesCount: favoriteIndices.length,
+    onMoveUpNext: moveUpNext,
     libraryTracks: tracks,
     mostPlayed: homeMostPlayed,
     recentlyPlayed: homeRecentlyPlayed,

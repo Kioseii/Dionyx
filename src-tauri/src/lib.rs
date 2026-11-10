@@ -16,6 +16,7 @@ use std::{
 use tauri::Manager;
 
 mod history;
+mod lyrics;
 mod lastfm;
 
 // ── Discord Rich Presence (custom IPC — supports activity type 2 "Listening") ──
@@ -467,7 +468,7 @@ fn validate_fetch_url(url: &str) -> Result<reqwest::Url, String> {
 
 /// Canonical folders scanned during this session. Commands that modify or
 /// delete files only act inside them.
-struct LibraryRoots(Mutex<Vec<PathBuf>>);
+pub(crate) struct LibraryRoots(Mutex<Vec<PathBuf>>);
 
 fn remember_library_root(state: &LibraryRoots, root: &Path) {
     if let Ok(canonical) = root.canonicalize() {
@@ -484,7 +485,7 @@ fn is_inside_roots(roots: &[PathBuf], canonical: &Path) -> bool {
 
 /// Resolves `path` and checks that it is a supported audio file inside a
 /// scanned library folder.
-fn ensure_library_audio_file(state: &LibraryRoots, path: &str) -> Result<PathBuf, String> {
+pub(crate) fn ensure_library_audio_file(state: &LibraryRoots, path: &str) -> Result<PathBuf, String> {
     let canonical = PathBuf::from(path)
         .canonicalize()
         .map_err(|_| "El archivo no existe en el disco.".to_string())?;
@@ -2300,7 +2301,12 @@ pub fn run() {
             lastfm::lastfm_scrobble,
             lastfm::lastfm_love,
             history::history_append,
-            history::history_read
+            history::history_read,
+            lyrics::lyrics_cache_get,
+            lyrics::lyrics_cache_set,
+            lyrics::lyrics_cache_info,
+            lyrics::lyrics_cache_clear,
+            lyrics::lyrics_read_lrc
         ])
         .setup(|app| {
             use tauri::{
