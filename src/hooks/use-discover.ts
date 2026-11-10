@@ -1,4 +1,3 @@
-import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { DISCOVER_SEED_ARTISTS_PER_PAGE } from "../app/constants";
 import type {
@@ -9,9 +8,8 @@ import type {
   LibraryTrack,
 } from "../app/types";
 import { normalizeDiscoverLookup } from "../app/utils";
+import { lastfmPublicGet } from "../app/lastfm-public";
 
-const LASTFM = "https://ws.audioscrobbler.com/2.0/";
-const LASTFM_API_KEY = "dc64b190b7e51f9c9d474d902ff67263";
 
 type UseDiscoverOptions = {
   discoverErrorMessage: string;
@@ -29,7 +27,6 @@ export function useDiscover({
   const [isDiscoverView, setIsDiscoverView] = useState(false);
   const [discoverTab, setDiscoverTab] = useState<DiscoverTab>("foryou");
   const [discoverForYou, setDiscoverForYou] = useState<LastFmArtist[]>([]);
-  const [discoverCharts, setDiscoverCharts] = useState<LastFmTrack[]>([]);
   const [isDiscoverLoading, setIsDiscoverLoading] = useState(false);
   const [discoverError, setDiscoverError] = useState<string | null>(null);
   const [discoverForYouPage, setDiscoverForYouPage] = useState(0);
@@ -72,15 +69,7 @@ export function useDiscover({
   );
   const safeDiscoverForYouPage = Math.min(discoverForYouPage, discoverForYouPageCount - 1);
 
-  async function lastFmGet(params: Record<string, string>): Promise<unknown> {
-    const qs = new URLSearchParams({
-      ...params,
-      api_key: LASTFM_API_KEY,
-      format: "json",
-    }).toString();
-    const body = await invoke<string>("fetch_url", { url: `${LASTFM}?${qs}` });
-    return JSON.parse(body);
-  }
+  const lastFmGet = (params: Record<string, string>): Promise<unknown> => lastfmPublicGet(params);
 
   function getLastFmImage(
     images: { "#text": string; size: string }[] | undefined,
@@ -281,36 +270,13 @@ export function useDiscover({
     setDiscoverForYou(topArtists);
   }
 
-  async function loadDiscoverCharts() {
-    try {
-      const data = await lastFmGet({
-        method: "chart.getTopTracks",
-        limit: "30",
-      }) as { tracks?: { track?: LastFmTrack[] } };
-      const chartTracks = data?.tracks?.track ?? [];
-      for (let index = 0; index < chartTracks.length; index += 5) {
-        const batch = chartTracks.slice(index, index + 5);
-        await Promise.all(
-          batch.map(async (track) => {
-            const artistName = typeof track.artist === "string" ? track.artist : track.artist?.name ?? "";
-            track.coverUrl = await getItunesCover(`${artistName} ${track.name}`, "song");
-          }),
-        );
-      }
-      setDiscoverCharts([...chartTracks]);
-    } catch {
-      // handled in caller
-    }
-  }
-
   async function loadDiscoverContent() {
     setIsDiscoverLoading(true);
     setDiscoverError(null);
     try {
+      // Charts load on their own (use-discover-charts).
       if (discoverTab === "foryou") {
         await loadDiscoverForYou();
-      } else {
-        await loadDiscoverCharts();
       }
     } catch {
       setDiscoverError(discoverErrorMessage);
@@ -347,7 +313,6 @@ export function useDiscover({
 
   return {
     activeDiscoverPreviewKey,
-    discoverCharts,
     discoverError,
     discoverForYou,
     discoverForYouPage,

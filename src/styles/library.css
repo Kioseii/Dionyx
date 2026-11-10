@@ -380,3 +380,75 @@
     transition: none;
   }
 }
+
+/* ── Descubrir › Charts: géneros y páginas ─────────────────── */
+
+.discover-chart-sources {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 18px;
+}
+
+.discover-chart-source {
+  height: 30px;
+  padding: 0 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.03);
+  color: rgb(var(--text-soft-rgb) / 0.8);
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-transform: capitalize;
+  cursor: pointer;
+  transition: background 140ms ease, border-color 140ms ease, color 140ms ease;
+}
+
+.discover-chart-source:hover {
+  background: rgba(255, 255, 255, 0.07);
+  color: rgb(var(--text-bright-rgb));
+}
+
+.discover-chart-source.active {
+  border-color: transparent;
+  background: linear-gradient(135deg, rgb(var(--accent-rgb)) 0%, rgb(var(--accent-deep-rgb)) 100%);
+  color: var(--on-accent, #fefbff);
+}
+
+.discover-chart-source:focus-visible {
+  outline: 2px solid rgb(var(--accent-rgb) / 0.6);
+  outline-offset: 2px;
+}
+
+.discover-chart-basis {
+  margin: 4px 0 0;
+  font-size: 0.78rem;
+  color: rgb(var(--text-faint-rgb) / 0.75);
+}
+
+.discover-page-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.discover-page-button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.discover-page-label {
+  font-variant-numeric: tabular-nums;
+}
+
+.discover-charts-list.is-loading {
+  opacity: 0.55;
+  transition: opacity 140ms ease;
+}
+
+.discover-chart-footer {
+  display: flex;
+  justify-content: center;
+  margin-top: 18px;
+}

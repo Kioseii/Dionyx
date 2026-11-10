@@ -37,6 +37,7 @@ import { useResumePosition } from "./hooks/use-resume-position";
 import { useSleepTimer } from "./hooks/use-sleep-timer";
 import { useTrackTransitions } from "./hooks/use-track-transitions";
 import { useLastfm } from "./hooks/use-lastfm";
+import { useDiscoverCharts } from "./hooks/use-discover-charts";
 import { sanitizeCrossfadeSeconds } from "./app/transitions";
 import { SHORTCUT_SEEK_SECONDS, SHORTCUT_VOLUME_STEP } from "./app/shortcuts";
 import { getTrackArtworkSrc, getTrackKey } from "./app/utils";
@@ -133,7 +134,6 @@ function App() {
   });
   const {
     activeDiscoverPreviewKey,
-    discoverCharts,
     discoverError,
     discoverForYou,
     discoverForYouPageCount,
@@ -466,6 +466,12 @@ function App() {
     playbackTime,
     selectedTrack,
     trackKey: getTrackKey(selectedTrack),
+  });
+  const discoverChartsState = useDiscoverCharts({
+    active: isDiscoverView && discoverTab === "charts",
+    getItunesCover,
+    lastfmUserName: lastfm.userName,
+    tracks,
   });
   useResumePosition({
     audioRef,
@@ -827,7 +833,6 @@ function App() {
     activeDiscoverPreviewKey,
     appLanguage,
     directoryInputRef,
-    discoverCharts,
     discoverError,
     discoverForYou,
     discoverForYouPageCount,
@@ -955,6 +960,7 @@ function App() {
   };
 
   const shellValue: ShellContextValue = {
+    discoverCharts: discoverChartsState,
     lastfm,
     playbackTransitions: {
       crossfadeSeconds,

@@ -25,6 +25,7 @@ export const storageKeys = {
   lastfmSession: "dionyx:lastfm-session",
   lastfmEnabled: "dionyx:lastfm-enabled",
   lastfmQueue: "dionyx:lastfm-queue",
+  discoverTaste: "dionyx:discover-taste",
   crossfadeSeconds: "dionyx:crossfade-seconds",
   volume: "dionyx:volume",
   playlists: "dionyx:playlists",
