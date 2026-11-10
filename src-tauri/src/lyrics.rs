@@ -27,7 +27,7 @@ fn entry_file(dir: &Path, key: &str) -> PathBuf {
 
 /// Text of a `.lrc` file: UTF-8 (with or without BOM), else Latin-1 like
 /// older Windows tools write.
-fn decode_text(bytes: &[u8]) -> String {
+pub(crate) fn decode_text(bytes: &[u8]) -> String {
     let bytes = bytes.strip_prefix(&[0xEF, 0xBB, 0xBF]).unwrap_or(bytes);
     match std::str::from_utf8(bytes) {
         Ok(text) => text.to_string(),

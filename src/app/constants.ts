@@ -29,6 +29,7 @@ export const storageKeys = {
   coverCache: "dionyx:cover-cache",
   autoUpdateCheck: "dionyx:auto-update-check",
   favorites: "dionyx:favorites",
+  watchFolder: "dionyx:watch-folder",
   favoritesPending: "dionyx:favorites-pending",
   favoritesSyncedAt: "dionyx:favorites-synced-at",
   updateDismissed: "dionyx:update-dismissed",
