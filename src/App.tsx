@@ -68,6 +68,7 @@ function App() {
   const directoryInputRef = useRef<HTMLInputElement | null>(null);
   const [nowPlayingOpen, setNowPlayingOpen] = useState(false);
   const [homePageOpen, setHomePageOpen] = useState(false);
+  const [statsPageOpen, setStatsPageOpen] = useState(false);
   const [pageRoot, setPageRoot] = useState<HTMLElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const audioPreloadRef = useRef<HTMLAudioElement | null>(null);
@@ -759,10 +760,13 @@ function App() {
         : "appearance"
       : homePageOpen
         ? "home"
-        : null;
+        : statsPageOpen
+          ? "stats"
+          : null;
 
   function closePages() {
     setHomePageOpen(false);
+    setStatsPageOpen(false);
     setIsThemeModalOpen(false);
     closeDownloadModal();
   }
@@ -1117,6 +1121,11 @@ function App() {
           setStatusMessage(`${copy.m3uError}: ${String(error)}`);
         }
       })();
+    },
+    historyEntries: playHistory.entries,
+    onOpenStats: () => {
+      closePages();
+      setStatsPageOpen(true);
     },
     onRescanQuietly: async () => {
       if (scannedPath) await scanFolderPathRef.current(scannedPath, "watch", true).catch(() => {});

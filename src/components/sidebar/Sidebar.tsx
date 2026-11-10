@@ -1,5 +1,5 @@
 import { isTauriRuntime } from "../../app/utils";
-import { Compass, Download, FileInput, FolderOpen, Heart, House, ListMusic, Palette, Plus, RefreshCw, Settings } from "lucide-react";
+import { BarChart3, Compass, Download, FileInput, FolderOpen, Heart, House, ListMusic, Palette, Plus, RefreshCw, Settings } from "lucide-react";
 import { countLabel } from "../../app/library-groups";
 import { useShell } from "../layout/ShellContext";
 import type { SavedPlaylist } from "../../app/types";
@@ -101,6 +101,15 @@ export function Sidebar({
         >
           <Compass aria-hidden="true" className="nav-item-icon" size={18} strokeWidth={2} />
           <span>{copy.discoverNav}</span>
+        </button>
+        <button
+          aria-current={page === "stats" ? "page" : undefined}
+          className={`nav-item ${page === "stats" ? "active" : ""}`}
+          onClick={shell.onOpenStats}
+          type="button"
+        >
+          <BarChart3 aria-hidden="true" className="nav-item-icon" size={18} strokeWidth={2} />
+          <span>{shell.copy.statsNav}</span>
         </button>
         <button
           aria-current={page === "downloads" ? "page" : undefined}
