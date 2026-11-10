@@ -2,7 +2,7 @@ import { findDuplicates, type DuplicateGroup } from "../../app/duplicates";
 import { directoryOf } from "../../app/m3u";
 import { MAX_CROSSFADE_SECONDS } from "../../app/transitions";
 import { NORMALIZATION_PREAMP_RANGE } from "../../app/normalization";
-import type { CSSProperties } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { FolderOpen, PictureInPicture2, SlidersHorizontal } from "lucide-react";
 import { countLabel } from "../../app/library-groups";
@@ -450,6 +450,112 @@ export function DuplicatesSettingsCard() {
           ))}
         </div>
       ) : null}
+    </div>
+  );
+}
+
+const SETTINGS_SECTIONS = [
+  "settings-general",
+  "settings-library",
+  "settings-playback",
+  "settings-mini",
+  "settings-lastfm",
+  "settings-shortcuts",
+  "settings-downloads",
+  "settings-about",
+] as const;
+
+/** One titled group of settings. */
+export function SettingsSection({ children, id, title }: { children: ReactNode; id: string; title: string }) {
+  return (
+    <section aria-labelledby={`${id}-title`} className="settings-section" id={id}>
+      <h2 className="settings-section-title" id={`${id}-title`}>{title}</h2>
+      <div className="settings-section-body">{children}</div>
+    </section>
+  );
+}
+
+/** Index on the left: jumps to a section and marks the one in view. */
+export function SettingsNav() {
+  const { copy } = useShell();
+  const [active, setActive] = useState<string>(SETTINGS_SECTIONS[0]);
+  const labels: Record<(typeof SETTINGS_SECTIONS)[number], string> = {
+    "settings-about": copy.settingsAboutSection,
+    "settings-downloads": copy.downloadsNav,
+    "settings-general": copy.settingsGeneral,
+    "settings-lastfm": "Last.fm",
+    "settings-library": copy.settingsLibrary,
+    "settings-mini": copy.miniPlayer,
+    "settings-playback": copy.settingsPlaybackSection,
+    "settings-shortcuts": copy.shortcutsSection,
+  };
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const visible = entries.filter((entry) => entry.isIntersecting).sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)[0];
+        if (visible) setActive(visible.target.id);
+      },
+      { rootMargin: "0px 0px -60% 0px" },
+    );
+    SETTINGS_SECTIONS.forEach((id) => {
+      const element = document.getElementById(id);
+      if (element) observer.observe(element);
+    });
+    return () => observer.disconnect();
+  }, []);
+
+  return (
+    <nav aria-label={copy.settingsNav} className="settings-nav">
+      {SETTINGS_SECTIONS.map((id) => (
+        <button
+          aria-current={active === id ? "true" : undefined}
+          className={`settings-nav-item${active === id ? " active" : ""}`}
+          key={id}
+          onClick={() => {
+            setActive(id);
+            document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+          }}
+          type="button"
+        >
+          {labels[id]}
+        </button>
+      ))}
+    </nav>
+  );
+}
+
+/** Mini player: how see-through its background is. */
+export function MiniPlayerSettingsCard() {
+  const { copy, miniOpacity, onEnterMiniMode, onMiniOpacityChange } = useShell();
+  const percent = Math.round(miniOpacity * 100);
+
+  return (
+    <div className="settings-card">
+      <label className="transition-row transition-row--slider" htmlFor="mini-opacity-range">
+        <div>
+          <strong>{copy.miniOpacityLabel}</strong>
+          <p className="muted settings-copy">{copy.miniOpacityHint}</p>
+        </div>
+        <span className="transition-value">{percent}%</span>
+      </label>
+      <input
+        className="volume-slider transition-slider"
+        id="mini-opacity-range"
+        max={100}
+        min={30}
+        onChange={(event) => onMiniOpacityChange(Number(event.currentTarget.value) / 100)}
+        step={5}
+        style={{ "--pct": `${((percent - 30) / 70) * 100}%` } as CSSProperties}
+        type="range"
+        value={percent}
+      />
+      <div className="settings-options">
+        <button className="settings-option" onClick={onEnterMiniMode} type="button">
+          <PictureInPicture2 aria-hidden="true" size={16} strokeWidth={2} />
+          {copy.miniPlayer}
+        </button>
+      </div>
     </div>
   );
 }

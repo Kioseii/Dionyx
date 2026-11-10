@@ -80,6 +80,9 @@ export type ShellContextValue = {
   /** Rescan automatically when files change in the music folder. */
   watchFolder: boolean;
   onToggleWatchFolder: () => void;
+  /** Mini player background opacity (0.3–1). */
+  miniOpacity: number;
+  onMiniOpacityChange: (value: number) => void;
   /** M3U playlist files (desktop app only). */
   onExportPlaylist: (playlistId: string) => void;
   onImportPlaylist: () => void;

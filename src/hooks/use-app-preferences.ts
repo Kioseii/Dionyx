@@ -29,6 +29,10 @@ export function useAppPreferences() {
   );
   const [gapless, setGapless] = useState(() => readStoredValue(storageKeys.gapless) === "true");
   const [watchFolder, setWatchFolder] = useState(() => readStoredValue(storageKeys.watchFolder) !== "false");
+  const [miniOpacity, setMiniOpacity] = useState(() => {
+    const stored = Number(readStoredValue(storageKeys.miniOpacity));
+    return Number.isFinite(stored) && stored >= 0.3 && stored <= 1 ? stored : 1;
+  });
   const [normalizationMode, setNormalizationMode] = useState<NormalizationMode>(() =>
     sanitizeNormalizationMode(readStoredValue(storageKeys.normalization)),
   );
@@ -81,6 +85,10 @@ export function useAppPreferences() {
   }, [watchFolder]);
 
   useEffect(() => {
+    writeStoredValue(storageKeys.miniOpacity, String(miniOpacity));
+  }, [miniOpacity]);
+
+  useEffect(() => {
     writeStoredValue(storageKeys.normalization, normalizationMode);
     writeStoredValue(storageKeys.normalizationPreamp, String(normalizationPreamp));
   }, [normalizationMode, normalizationPreamp]);
@@ -123,6 +131,8 @@ export function useAppPreferences() {
     setGapless,
     setWatchFolder,
     watchFolder,
+    miniOpacity,
+    setMiniOpacity,
     setNormalizationMode,
     setNormalizationPreamp,
     appLanguage,

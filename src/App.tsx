@@ -114,6 +114,8 @@ function App() {
     setNormalizationPreamp,
     setWatchFolder,
     watchFolder,
+    miniOpacity,
+    setMiniOpacity,
   } = useAppPreferences();
   const copy = uiText[appLanguage];
   const {
@@ -517,6 +519,12 @@ function App() {
     trackKey: getTrackKey(selectedTrack),
   });
   const updater = useAppUpdater();
+
+  // Mini player see-through: the window is transparent (tauri.windows.conf),
+  // the page background only while the mini player is shown.
+  useEffect(() => {
+    document.documentElement.style.setProperty("--mini-opacity", String(miniOpacity));
+  }, [miniOpacity]);
 
   // Folder watcher (Rust): files added/removed/renamed -> quiet rescan that
   // keeps the current song playing.
@@ -1104,6 +1112,8 @@ function App() {
     favoritesCount: favoriteIndices.length,
     onMoveUpNext: moveUpNext,
     onToggleWatchFolder: () => setWatchFolder(!watchFolder),
+    miniOpacity,
+    onMiniOpacityChange: (value) => setMiniOpacity(Math.min(Math.max(value, 0.3), 1)),
     onExportPlaylist: (playlistId) => {
       const playlist = savedPlaylists.find((item) => item.id === playlistId);
       if (!playlist || !isTauriRuntime()) return;
@@ -1267,6 +1277,10 @@ function App() {
     "volume-down": () => setVolume(Math.max(0, Math.round((volume - SHORTCUT_VOLUME_STEP) * 100) / 100)),
     "volume-up": () => setVolume(Math.min(1, Math.round((volume + SHORTCUT_VOLUME_STEP) * 100) / 100)),
   }, !miniMode);
+
+  useEffect(() => {
+    document.documentElement.classList.toggle("mini-mode", miniMode);
+  }, [miniMode]);
 
   return (
     <ShellProvider value={shellValue}>

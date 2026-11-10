@@ -81,6 +81,18 @@ body {
   background: #0d0d0f;
 }
 
+/* Mini player: let the (transparent) window show what is behind it. */
+html.mini-mode,
+html.mini-mode body {
+  background: transparent;
+}
+
+html.mini-mode .mini-player-root .mp-title,
+html.mini-mode .mini-player-root .mp-artist,
+html.mini-mode .mini-player-root .mp-timecode {
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+}
+
 button {
   font: inherit;
 }
@@ -4098,7 +4110,8 @@ button {
   padding: 10px 12px 10px;
   width: 100vw;
   height: 100vh;
-  background: rgba(13, 13, 15, 0.99);
+  /* Opacity chosen in Settings > Mini player (see-through on the desktop). */
+  background: rgb(13 13 15 / var(--mini-opacity, 0.99));
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 14px;
   box-sizing: border-box;
