@@ -105,7 +105,7 @@ export function useLibraryScan({
   const scanGenerationRef = useRef(0);
   const bannerTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scanFolderPathRef = useRef<
-    (folderPath: string, mode?: "manual" | "restore", preservePlayback?: boolean) => Promise<void>
+    (folderPath: string, mode?: "manual" | "restore" | "watch", preservePlayback?: boolean) => Promise<void>
   >(async () => {});
 
   useEffect(() => {
@@ -173,7 +173,7 @@ export function useLibraryScan({
 
   async function scanFolderPath(
     folderPath: string,
-    mode: "manual" | "restore" = "manual",
+    mode: "manual" | "restore" | "watch" = "manual",
     preservePlayback = false,
   ) {
     const generation = scanGenerationRef.current + 1;
@@ -189,7 +189,8 @@ export function useLibraryScan({
 
     applyScanResult(result, preservePlayback);
     writeStoredValue(storageKeys.lastFolderPath, folderPath);
-    setStatusMessage(
+    // Automatic rescans (folder watcher) stay quiet.
+    if (mode !== "watch") setStatusMessage(
       result.trackCount > 0
         ? mode === "restore"
           ? appLanguage === "es"

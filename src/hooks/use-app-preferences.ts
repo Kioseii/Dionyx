@@ -28,6 +28,7 @@ export function useAppPreferences() {
     sanitizeHexColor(readStoredValue(storageKeys.themeColor)),
   );
   const [gapless, setGapless] = useState(() => readStoredValue(storageKeys.gapless) === "true");
+  const [watchFolder, setWatchFolder] = useState(() => readStoredValue(storageKeys.watchFolder) !== "false");
   const [normalizationMode, setNormalizationMode] = useState<NormalizationMode>(() =>
     sanitizeNormalizationMode(readStoredValue(storageKeys.normalization)),
   );
@@ -76,6 +77,10 @@ export function useAppPreferences() {
   }, [gapless]);
 
   useEffect(() => {
+    writeStoredValue(storageKeys.watchFolder, String(watchFolder));
+  }, [watchFolder]);
+
+  useEffect(() => {
     writeStoredValue(storageKeys.normalization, normalizationMode);
     writeStoredValue(storageKeys.normalizationPreamp, String(normalizationPreamp));
   }, [normalizationMode, normalizationPreamp]);
@@ -116,6 +121,8 @@ export function useAppPreferences() {
     normalizationPreamp,
     setCrossfadeSeconds,
     setGapless,
+    setWatchFolder,
+    watchFolder,
     setNormalizationMode,
     setNormalizationPreamp,
     appLanguage,

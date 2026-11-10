@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import dionyxLogoRaw from "./assets/dionyx-logo.svg?raw";
 import { equalizerBandsConfig, supportedAudioAccept } from "./app/constants";
 import { getEmptyTrack, uiText } from "./app/ui";
@@ -41,13 +41,14 @@ import { usePlayHistory } from "./hooks/use-play-history";
 import { useFavoritesSync } from "./hooks/use-favorites-sync";
 import { favoritesStore, useFavoritesVersion } from "./app/favorites-store";
 import { indexByIdentity, mostPlayed, recentlyPlayed, songIdentity } from "./app/history";
+import { buildM3u, matchM3uToLibrary, parseM3u, playlistNameFromFile } from "./app/m3u";
 import { useListenTracker } from "./hooks/use-listen-tracker";
 import { useDiscoverCharts } from "./hooks/use-discover-charts";
 import { useAppUpdater } from "./hooks/use-app-updater";
 import { sanitizeCrossfadeSeconds } from "./app/transitions";
 import { normalizationFactor, sanitizePreampDb } from "./app/normalization";
 import { SHORTCUT_SEEK_SECONDS, SHORTCUT_VOLUME_STEP } from "./app/shortcuts";
-import { getTrackArtworkSrc, getTrackKey } from "./app/utils";
+import { getTrackArtworkSrc, getTrackKey, isTauriRuntime } from "./app/utils";
 import { useLibraryRuntimeState } from "./hooks/use-library-runtime-state";
 import { useMainStageHostOptions } from "./hooks/use-main-stage-host-options";
 import { usePlaybackScrub } from "./hooks/use-playback-scrub";
@@ -110,6 +111,8 @@ function App() {
     normalizationPreamp,
     setNormalizationMode,
     setNormalizationPreamp,
+    setWatchFolder,
+    watchFolder,
   } = useAppPreferences();
   const copy = uiText[appLanguage];
   const {
@@ -513,6 +516,33 @@ function App() {
     trackKey: getTrackKey(selectedTrack),
   });
   const updater = useAppUpdater();
+
+  // Folder watcher (Rust): files added/removed/renamed -> quiet rescan that
+  // keeps the current song playing.
+  useEffect(() => {
+    if (!watchFolder || !scannedPath || !isTauriRuntime()) return;
+    let cancelled = false;
+    let timer = 0;
+    let unlisten: (() => void) | null = null;
+    void import("@tauri-apps/api/event")
+      .then(({ listen }) =>
+        listen("library-changed", () => {
+          window.clearTimeout(timer);
+          timer = window.setTimeout(() => {
+            void scanFolderPathRef.current(scannedPath, "watch", true).catch(() => {});
+          }, 800);
+        }),
+      )
+      .then((stop) => {
+        if (cancelled) stop();
+        else unlisten = stop;
+      });
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+      unlisten?.();
+    };
+  }, [scanFolderPathRef, scannedPath, watchFolder]);
   const discoverChartsState = useDiscoverCharts({
     active: isDiscoverView && discoverTab === "charts",
     getItunesCover,
@@ -1069,6 +1099,61 @@ function App() {
     onOpenArtist: (key) => openLibraryGroup("artist", key),
     favoritesCount: favoriteIndices.length,
     onMoveUpNext: moveUpNext,
+    onToggleWatchFolder: () => setWatchFolder(!watchFolder),
+    onExportPlaylist: (playlistId) => {
+      const playlist = savedPlaylists.find((item) => item.id === playlistId);
+      if (!playlist || !isTauriRuntime()) return;
+      void (async () => {
+        const [{ save }, { invoke }] = await Promise.all([import("@tauri-apps/plugin-dialog"), import("@tauri-apps/api/core")]);
+        const path = await save({
+          defaultPath: `${playlist.name}.m3u8`,
+          filters: [{ extensions: ["m3u8", "m3u"], name: "M3U" }],
+        });
+        if (!path) return;
+        try {
+          await invoke("m3u_write", { content: buildM3u(playlist.tracks, path), path });
+          setStatusMessage(`${copy.m3uExported}: ${playlistNameFromFile(path)}`);
+        } catch (error) {
+          setStatusMessage(`${copy.m3uError}: ${String(error)}`);
+        }
+      })();
+    },
+    onRescanQuietly: async () => {
+      if (scannedPath) await scanFolderPathRef.current(scannedPath, "watch", true).catch(() => {});
+    },
+    onImportPlaylist: () => {
+      if (!isTauriRuntime()) return;
+      void (async () => {
+        const [{ open }, { invoke }] = await Promise.all([import("@tauri-apps/plugin-dialog"), import("@tauri-apps/api/core")]);
+        const path = await open({ filters: [{ extensions: ["m3u8", "m3u"], name: "M3U" }], multiple: false });
+        if (typeof path !== "string") return;
+        try {
+          const text = await invoke<string>("m3u_read", { path });
+          const locations = parseM3u(text, path);
+          const { matched } = matchM3uToLibrary(locations, tracks);
+          if (matched.length === 0) {
+            setStatusMessage(copy.m3uNothingFound);
+            return;
+          }
+          const name = playlistNameFromFile(path);
+          setSavedPlaylists((current) => [
+            ...current,
+            {
+              createdAt: Date.now(),
+              id: `m3u-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
+              name,
+              sourceCollectionName: collectionName,
+              sourcePath: scannedPath,
+              tracks: matched,
+            },
+          ]);
+          setStatusMessage(`${copy.m3uImported} "${name}": ${matched.length} / ${locations.length}`);
+        } catch (error) {
+          setStatusMessage(`${copy.m3uError}: ${String(error)}`);
+        }
+      })();
+    },
+    watchFolder,
     libraryTracks: tracks,
     mostPlayed: homeMostPlayed,
     recentlyPlayed: homeRecentlyPlayed,

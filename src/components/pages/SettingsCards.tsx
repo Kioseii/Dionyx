@@ -1,3 +1,5 @@
+import { findDuplicates, type DuplicateGroup } from "../../app/duplicates";
+import { directoryOf } from "../../app/m3u";
 import { MAX_CROSSFADE_SECONDS } from "../../app/transitions";
 import { NORMALIZATION_PREAMP_RANGE } from "../../app/normalization";
 import type { CSSProperties } from "react";
@@ -9,7 +11,7 @@ import { useShell } from "../layout/ShellContext";
 
 /** Settings card: current library folder and how to change or rescan it. */
 export function LibrarySettingsCard() {
-  const { copy, collectionName, isScanning, libraryTrackCount, onScanFolder, scannedPath } = useShell();
+  const { copy, collectionName, isScanning, libraryTrackCount, onScanFolder, onToggleWatchFolder, scannedPath, watchFolder } = useShell();
 
   return (
     <div className="settings-card">
@@ -25,6 +27,24 @@ export function LibrarySettingsCard() {
         <FolderOpen aria-hidden="true" size={16} strokeWidth={2} />
         {isScanning ? copy.scanning : copy.settingsChooseFolder}
       </button>
+      {isTauriRuntime() ? (
+        <div className="transition-row watch-folder-row">
+          <div>
+            <span id="watch-folder-label">{copy.watchFolderLabel}</span>
+            <p className="muted settings-copy">{copy.watchFolderHint}</p>
+          </div>
+          <button
+            aria-checked={watchFolder}
+            aria-labelledby="watch-folder-label"
+            className={`settings-toggle ${watchFolder ? "active" : ""}`}
+            onClick={onToggleWatchFolder}
+            role="switch"
+            type="button"
+          >
+            <span className="settings-toggle-thumb" />
+          </button>
+        </div>
+      ) : null}
       <LyricsCacheRow />
     </div>
   );
@@ -349,6 +369,87 @@ export function LyricsCacheRow() {
       >
         {copy.lyricsCacheClear}
       </button>
+    </div>
+  );
+}
+
+/** Settings card: the same song saved more than once; extra copies can go to the Recycle Bin. */
+export function DuplicatesSettingsCard() {
+  const { copy, libraryTracks, onRescanQuietly, watchFolder } = useShell();
+  const [groups, setGroups] = useState<DuplicateGroup[] | null>(null);
+  const [busyPath, setBusyPath] = useState<string | null>(null);
+
+  const search = () => setGroups(findDuplicates(libraryTracks));
+
+  const moveToTrash = async (path: string) => {
+    const [{ ask }, { invoke }] = await Promise.all([import("@tauri-apps/plugin-dialog"), import("@tauri-apps/api/core")]);
+    const confirmed = await ask(`${copy.duplicatesConfirm}\n\n${path}`, { kind: "warning", title: copy.duplicatesTitle });
+    if (!confirmed) return;
+    setBusyPath(path);
+    try {
+      await invoke("trash_track_file", { path });
+      // The folder watcher rescans by itself; without it, rescan now.
+      if (!watchFolder) await onRescanQuietly();
+      setGroups((current) =>
+        current
+          ?.map((group) => ({ ...group, indices: group.indices.filter((index) => libraryTracks[index]?.path !== path) }))
+          .filter((group) => group.indices.length > 1) ?? null,
+      );
+    } finally {
+      setBusyPath(null);
+    }
+  };
+
+  return (
+    <div className="settings-card">
+      <span className="font-preset-label">{copy.duplicatesSection}</span>
+      <strong>{copy.duplicatesTitle}</strong>
+      <p className="muted settings-copy">{copy.duplicatesHint}</p>
+      <div className="settings-options">
+        <button className="settings-option" disabled={libraryTracks.length === 0} onClick={search} type="button">
+          {groups ? copy.duplicatesSearchAgain : copy.duplicatesSearch}
+        </button>
+      </div>
+
+      {groups && groups.length === 0 ? <p className="muted settings-copy">{copy.duplicatesNone}</p> : null}
+      {groups && groups.length > 0 ? (
+        <div className="duplicate-groups">
+          <p className="muted settings-copy">
+            {copy.duplicatesFound}: {groups.length}
+          </p>
+          {groups.slice(0, 60).map((group) => (
+            <div className="duplicate-group" key={group.indices.join("-")}>
+              <strong>
+                {group.artist} — {group.title}
+              </strong>
+              {group.indices.map((index, position) => {
+                const track = libraryTracks[index];
+                if (!track) return null;
+                return (
+                  <div className="duplicate-copy" key={track.path}>
+                    <span className="format-pill">{track.format}</span>
+                    <span className="duplicate-folder" title={track.path}>
+                      {directoryOf(track.path)}
+                    </span>
+                    {position === 0 ? (
+                      <span className="duplicate-best">{copy.duplicatesBest}</span>
+                    ) : isTauriRuntime() ? (
+                      <button
+                        className="settings-option duplicate-trash"
+                        disabled={busyPath !== null}
+                        onClick={() => void moveToTrash(track.path)}
+                        type="button"
+                      >
+                        {busyPath === track.path ? copy.duplicatesMoving : copy.duplicatesTrash}
+                      </button>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }

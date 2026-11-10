@@ -77,6 +77,14 @@ export type ShellContextValue = {
   onOpenFavorites: () => void;
   /** Moves a song of "Up next" from one queue position to another. */
   onMoveUpNext: (from: number, to: number) => void;
+  /** Rescan automatically when files change in the music folder. */
+  watchFolder: boolean;
+  onToggleWatchFolder: () => void;
+  /** M3U playlist files (desktop app only). */
+  onExportPlaylist: (playlistId: string) => void;
+  onImportPlaylist: () => void;
+  /** Rescan the current folder quietly, keeping the song that is playing. */
+  onRescanQuietly: () => Promise<void>;
   onOpenTrackAlbum: (track: LibraryTrack) => void;
   onOpenTrackArtist: (track: LibraryTrack) => void;
   /** Plays library tracks as the queue (shuffled when `shuffle` is true). */

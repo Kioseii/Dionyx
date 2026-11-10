@@ -1,4 +1,5 @@
-import { Compass, Download, FolderOpen, Heart, House, ListMusic, Palette, Plus, RefreshCw, Settings } from "lucide-react";
+import { isTauriRuntime } from "../../app/utils";
+import { Compass, Download, FileInput, FolderOpen, Heart, House, ListMusic, Palette, Plus, RefreshCw, Settings } from "lucide-react";
 import { countLabel } from "../../app/library-groups";
 import { useShell } from "../layout/ShellContext";
 import type { SavedPlaylist } from "../../app/types";
@@ -118,6 +119,17 @@ export function Sidebar({
       <section className="playlist-section">
         <div className="sidebar-section-header">
           <p className="sidebar-label">{copy.playlists}</p>
+          {isTauriRuntime() ? (
+            <button
+              aria-label={shell.copy.m3uImport}
+              className="sidebar-icon-button sidebar-import-button"
+              onClick={shell.onImportPlaylist}
+              title={shell.copy.m3uImport}
+              type="button"
+            >
+              <FileInput aria-hidden="true" size={15} strokeWidth={2.1} />
+            </button>
+          ) : null}
           <button
             aria-label={copy.newPlaylist.replace(/^\+\s*/, "")}
             className="sidebar-icon-button"
@@ -196,6 +208,18 @@ export function Sidebar({
                   >
                     {copy.editPlaylist}
                   </button>
+                  {isTauriRuntime() ? (
+                    <button
+                      className="playlist-menu-item"
+                      onClick={() => {
+                        onPlaylistMenuToggle(playlist.id);
+                        shell.onExportPlaylist(playlist.id);
+                      }}
+                      type="button"
+                    >
+                      {shell.copy.m3uExport}
+                    </button>
+                  ) : null}
                   <button
                     className="playlist-menu-item danger"
                     onClick={() => {

@@ -16,7 +16,9 @@ use std::{
 use tauri::Manager;
 
 mod history;
+mod library_tools;
 mod lyrics;
+mod watcher;
 mod lastfm;
 
 // ── Discord Rich Presence (custom IPC — supports activity type 2 "Listening") ──
@@ -589,6 +591,7 @@ async fn scan_music_folder(
     let scan = run_blocking(move || scan_music_folder_blocking(&folder_path, artwork_dir.as_deref()))
         .await?;
     remember_library_root(&app.state::<LibraryRoots>(), Path::new(&scan.scanned_path));
+    watcher::watch_library_root(&app, Path::new(&scan.scanned_path));
     Ok(scan)
 }
 
@@ -659,7 +662,7 @@ fn collect_audio_files(directory: &Path, output: &mut Vec<PathBuf>) {
     }
 }
 
-fn is_supported_audio_file(path: &Path) -> bool {
+pub(crate) fn is_supported_audio_file(path: &Path) -> bool {
     path.extension()
         .and_then(|extension| extension.to_str())
         .map(|extension| {
@@ -2276,6 +2279,7 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .manage(HideOnTrayState(AtomicBool::new(false)))
         .manage(LibraryRoots(Mutex::new(Vec::new())))
+        .manage(watcher::LibraryWatcher::default())
         .manage(create_discord_state())
         .invoke_handler(tauri::generate_handler![
             scan_music_folder,
@@ -2306,7 +2310,10 @@ pub fn run() {
             lyrics::lyrics_cache_set,
             lyrics::lyrics_cache_info,
             lyrics::lyrics_cache_clear,
-            lyrics::lyrics_read_lrc
+            lyrics::lyrics_read_lrc,
+            library_tools::m3u_write,
+            library_tools::m3u_read,
+            library_tools::trash_track_file
         ])
         .setup(|app| {
             use tauri::{
